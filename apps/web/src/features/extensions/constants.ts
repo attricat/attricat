@@ -303,7 +303,18 @@ export const extensionManagementTabIndex = {
   marketplace: 0,
   installed: 1,
   layout: 2,
+  secrets: 3,
 } as const;
+
+/**
+ * Bounds of a workspace extension secret, as the host accepts it: the name an
+ * extension asks for in `secrets.get.v1` and the value stored under it.
+ */
+export const extensionSecretLimits = {
+  nameBytes: 128,
+  valueBytes: 65_536,
+} as const;
+export const extensionSecretNamePattern = /^[A-Za-z0-9._-]+$/;
 
 /** Icons the host draws for actions and badges; extensions name one. */
 export const hostIcons = [

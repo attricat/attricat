@@ -46,6 +46,7 @@ import { Route as ManageExtensionsExtensionIdRouteImport } from './routes/manage
 import { Route as ManageExtensionsInstalledRouteImport } from './routes/manage/extensions/installed'
 import { Route as ManageExtensionsLayoutRouteImport } from './routes/manage/extensions/layout'
 import { Route as ManageExtensionsMarketplaceRouteImport } from './routes/manage/extensions/marketplace'
+import { Route as ManageExtensionsSecretsRouteImport } from './routes/manage/extensions/secrets'
 import { Route as ManageExtensionsSideloadRouteImport } from './routes/manage/extensions/sideload'
 import { Route as ManageExtensionsUiKitRouteImport } from './routes/manage/extensions/ui-kit'
 import { Route as ManageReusableAttributesIndexRouteImport } from './routes/manage/reusable-attributes/index'
@@ -274,6 +275,11 @@ const ManageExtensionsMarketplaceRoute =
     path: '/manage/extensions/marketplace',
     getParentRoute: () => rootRouteImport,
   } as any)
+const ManageExtensionsSecretsRoute = ManageExtensionsSecretsRouteImport.update({
+  id: '/manage/extensions/secrets',
+  path: '/manage/extensions/secrets',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ManageExtensionsSideloadRoute =
   ManageExtensionsSideloadRouteImport.update({
     id: '/manage/extensions/sideload',
@@ -508,6 +514,7 @@ export interface FileRoutesByFullPath {
   '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
   '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
   '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
+  '/manage/extensions/secrets': typeof ManageExtensionsSecretsRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/extensions/ui-kit': typeof ManageExtensionsUiKitRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
@@ -579,6 +586,7 @@ export interface FileRoutesByTo {
   '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
   '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
   '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
+  '/manage/extensions/secrets': typeof ManageExtensionsSecretsRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/extensions/ui-kit': typeof ManageExtensionsUiKitRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
@@ -654,6 +662,7 @@ export interface FileRoutesById {
   '/manage/extensions/installed': typeof ManageExtensionsInstalledRoute
   '/manage/extensions/layout': typeof ManageExtensionsLayoutRoute
   '/manage/extensions/marketplace': typeof ManageExtensionsMarketplaceRoute
+  '/manage/extensions/secrets': typeof ManageExtensionsSecretsRoute
   '/manage/extensions/sideload': typeof ManageExtensionsSideloadRoute
   '/manage/extensions/ui-kit': typeof ManageExtensionsUiKitRoute
   '/manage/reusable-attributes/$definitionId': typeof ManageReusableAttributesDefinitionIdRoute
@@ -731,6 +740,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/installed'
     | '/manage/extensions/layout'
     | '/manage/extensions/marketplace'
+    | '/manage/extensions/secrets'
     | '/manage/extensions/sideload'
     | '/manage/extensions/ui-kit'
     | '/manage/reusable-attributes/$definitionId'
@@ -802,6 +812,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/installed'
     | '/manage/extensions/layout'
     | '/manage/extensions/marketplace'
+    | '/manage/extensions/secrets'
     | '/manage/extensions/sideload'
     | '/manage/extensions/ui-kit'
     | '/manage/reusable-attributes/$definitionId'
@@ -876,6 +887,7 @@ export interface FileRouteTypes {
     | '/manage/extensions/installed'
     | '/manage/extensions/layout'
     | '/manage/extensions/marketplace'
+    | '/manage/extensions/secrets'
     | '/manage/extensions/sideload'
     | '/manage/extensions/ui-kit'
     | '/manage/reusable-attributes/$definitionId'
@@ -949,6 +961,7 @@ export interface RootRouteChildren {
   ManageExtensionsInstalledRoute: typeof ManageExtensionsInstalledRoute
   ManageExtensionsLayoutRoute: typeof ManageExtensionsLayoutRoute
   ManageExtensionsMarketplaceRoute: typeof ManageExtensionsMarketplaceRoute
+  ManageExtensionsSecretsRoute: typeof ManageExtensionsSecretsRoute
   ManageExtensionsSideloadRoute: typeof ManageExtensionsSideloadRoute
   ManageExtensionsUiKitRoute: typeof ManageExtensionsUiKitRoute
   ManageReusableAttributesDefinitionIdRoute: typeof ManageReusableAttributesDefinitionIdRoute
@@ -1238,6 +1251,13 @@ declare module '@tanstack/react-router' {
       path: '/manage/extensions/marketplace'
       fullPath: '/manage/extensions/marketplace'
       preLoaderRoute: typeof ManageExtensionsMarketplaceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/manage/extensions/secrets': {
+      id: '/manage/extensions/secrets'
+      path: '/manage/extensions/secrets'
+      fullPath: '/manage/extensions/secrets'
+      preLoaderRoute: typeof ManageExtensionsSecretsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/manage/extensions/sideload': {
@@ -1611,6 +1631,7 @@ const rootRouteChildren: RootRouteChildren = {
   ManageExtensionsInstalledRoute: ManageExtensionsInstalledRoute,
   ManageExtensionsLayoutRoute: ManageExtensionsLayoutRoute,
   ManageExtensionsMarketplaceRoute: ManageExtensionsMarketplaceRoute,
+  ManageExtensionsSecretsRoute: ManageExtensionsSecretsRoute,
   ManageExtensionsSideloadRoute: ManageExtensionsSideloadRoute,
   ManageExtensionsUiKitRoute: ManageExtensionsUiKitRoute,
   ManageReusableAttributesDefinitionIdRoute:

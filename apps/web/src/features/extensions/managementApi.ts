@@ -8,6 +8,7 @@ import {
   installationSchema,
   registryDetailsSchema,
   workspaceExtensionLayoutSchema,
+  workspaceExtensionSecretSchema,
   type WorkspaceExtensionLayout,
 } from './schemas';
 import { extensionsApiPath, extensionPath } from './apiPaths';
@@ -34,6 +35,28 @@ export const updateWorkspaceExtensionLayout = (
     '/api/workspace/extension-layout',
     jsonRequest('PUT', layout),
   );
+const workspaceExtensionSecretsPath = '/api/workspace/extension-secrets';
+const workspaceExtensionSecretPath = (name: string) =>
+  `${workspaceExtensionSecretsPath}/${encodeURIComponent(name)}`;
+export const workspaceExtensionSecrets = () =>
+  request(
+    workspaceExtensionSecretsPath,
+    z.array(workspaceExtensionSecretSchema),
+  );
+/** Creates the secret, or replaces the value of one with the same name. */
+export const putWorkspaceExtensionSecret = ({
+  name,
+  value,
+}: {
+  name: string;
+  value: string;
+}) =>
+  requestNoContent(
+    workspaceExtensionSecretPath(name),
+    jsonRequest('PUT', { value }),
+  );
+export const deleteWorkspaceExtensionSecret = (name: string) =>
+  requestNoContent(workspaceExtensionSecretPath(name), { method: 'DELETE' });
 export const extensionDetail = (id: string) =>
   request(extensionPath(id), detailSchema);
 export const installExtension = (input: ExtensionReleaseReference) =>

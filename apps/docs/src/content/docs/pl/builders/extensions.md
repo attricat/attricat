@@ -53,14 +53,18 @@ W miejscach wspólnych dla wszystkich schematów, takich jak nawigacja i panele,
 
 ## Sekrety
 
-Rozszerzenia wywołujące usługi zewnętrzne często potrzebują klucza API. Zapisz go jako nazwany sekret rozszerzeń obszaru roboczego przez API:
+Rozszerzenia wywołujące usługi zewnętrzne często potrzebują klucza API. Zapisz go jako nazwany sekret rozszerzeń obszaru roboczego w **Zarządzanie → Rozszerzenia → Sekrety**: **Dodaj sekret** prosi o nazwę podaną w dokumentacji rozszerzenia i o wartość. Nazwy składają się z liter, cyfr, kropek, łączników i podkreśleń i mają maksymalnie 128 znaków.
+
+Wartości są tylko do zapisu: nikt nie może ich odczytać, a rozszerzenie z `secrets.read` otrzymuje wartość tylko w trakcie działania. Lista pokazuje każdą nazwę i to, kiedy ostatnio ustawiono jej wartość. **Zastąp wartość** zmienia sekret bez zmiany nazwy, a po usunięciu sekretu korzystające z niego rozszerzenia nie zadziałają, dopóki nie dodasz go ponownie.
+
+Automatyzacja może zrobić to samo przez API, z tokenem uprawnionym do zarządzania rozszerzeniami:
 
 ```http
 PUT /workspace/extension-secrets/destination-token
 {"value": "…"}
 ```
 
-`GET /workspace/extension-secrets` zwraca wyłącznie nazwy, a `DELETE` usuwa sekret. Wartości są tylko do zapisu: nikt nie może ich odczytać, a rozszerzenie z `secrets.read` otrzymuje wartość tylko w trakcie działania.
+`GET /workspace/extension-secrets` zwraca wyłącznie nazwy, a `DELETE` usuwa sekret.
 
 ## Połączenia
 
