@@ -598,7 +598,7 @@ views:
 | `views.detail.extensions` | Record actions, header actions, record tabs and form assists, as `<extension-id>/<contribution-id>`, in display order. Up to 32. |
 | `views.table.extensions` | Explorer row, selection and toolbar actions, in the same form. Up to 32. |
 
-Only contributions that declare the view appear in it. A `detail` stack without `children` and a `table` without `columns` keep the default layout and columns. Entries for extensions that are not installed or enabled are kept and ignored. Saving checks an enabled form assist's watched and proposed fields against the blueprint. Record blueprints only.
+Only contributions that declare the view appear in it. A `detail` stack without `children` and a `table` without `columns` keep the default layout and columns. Entries for extensions that are not installed or enabled are kept and ignored. Saving checks an enabled form assist's watched and proposed fields against the blueprint; an assist enabled later whose fields do not fit never runs. A record form runs at most the first 8 form assists listed. Record blueprints only.
 
 ## Publication
 

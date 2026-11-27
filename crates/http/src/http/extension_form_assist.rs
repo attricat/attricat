@@ -49,6 +49,9 @@ const FORM_ASSIST_TIMEOUT: Duration = Duration::from_secs(3);
 const FORM_ASSIST_CONTEXT_VERSION: u32 = 1;
 /// The most targets of one relationship field passed to an assist.
 const MAX_FORM_ASSIST_TARGETS: usize = 100;
+/// The most form assists one record form runs, in the detail view's order:
+/// each watched change can call every assist watching that field.
+const MAX_FORM_ASSISTS: usize = 8;
 /// Form assist calls one workspace runs at once: half its extension
 /// invocations, so typing in forms never holds every slot its event
 /// deliveries and other commands need.
@@ -159,10 +162,29 @@ struct Answer {
     proposals: Vec<Proposal>,
 }
 
+/// Whether an assist may watch `attribute`: any scalar or relationship field.
+fn may_watch(attribute: &Attribute) -> bool {
+    attribute.value_type != ValueType::File
+}
+
+/// Whether an assist may propose a value for `attribute`: an editable scalar
+/// field, which the user could also have entered.
+fn may_propose(attribute: &Attribute) -> bool {
+    !matches!(
+        attribute.value_type,
+        ValueType::Relationship | ValueType::File
+    ) && !attribute.readonly
+        && attribute.generated.is_none()
+        && attribute.balance.is_none()
+}
+
 /// The revision's form assists that run now: listed by its detail view,
 /// declared by an enabled extension granted `client.form_assist` for that
-/// view, with a declared command, and not narrowed away by `when.blueprints`.
-/// The detail view's order is the order they run in.
+/// view, with a declared command, not narrowed away by `when.blueprints`,
+/// and watching and proposing only fields the blueprint lets them. Saving
+/// checks those fields only for assists enabled then, so they are checked
+/// again here. The detail view's order is the order they run in, up to
+/// [`MAX_FORM_ASSISTS`]. Also returns the revision's attributes by code.
 async fn active_assists(
     repository: &AttricatRepository,
     blueprint_id: Uuid,
@@ -171,6 +193,7 @@ async fn active_assists(
     (
         String,
         Vec<(Arc<ExtensionRuntimeInstallation>, UiContribution)>,
+        HashMap<String, Attribute>,
     ),
     ApiError,
 > {
@@ -179,8 +202,24 @@ async fn active_assists(
         .await?
         .ok_or_else(|| ApiError::not_found("blueprint version"))?;
     if entries.is_empty() {
-        return Ok((code, Vec::new()));
+        return Ok((code, Vec::new(), HashMap::new()));
     }
+    let attributes: HashMap<String, Attribute> = repository
+        .list_attributes(blueprint_id, blueprint_version)
+        .await?
+        .into_iter()
+        .map(|attribute| (attribute.code.clone(), attribute))
+        .collect();
+    let fits = |declaration: &FormAssistDeclaration| {
+        declaration
+            .watch
+            .iter()
+            .all(|code| attributes.get(code).is_some_and(may_watch))
+            && declaration
+                .proposes
+                .iter()
+                .all(|code| attributes.get(code).is_some_and(may_propose))
+    };
     let providers: HashMap<String, Arc<ExtensionRuntimeInstallation>> = repository
         .enabled_form_assist_providers()
         .await?
@@ -200,10 +239,19 @@ async fn active_assists(
                         when.blueprints.is_empty() || when.blueprints.contains(&code)
                     })
             })?;
+            if !fits(declaration(contribution)) {
+                tracing::warn!(
+                    extension = %extension_id,
+                    assist = %contribution_id,
+                    "a form assist watches or proposes a field the blueprint does not allow"
+                );
+                return None;
+            }
             Some((installation.clone(), contribution.clone()))
         })
+        .take(MAX_FORM_ASSISTS)
         .collect();
-    Ok((code, assists))
+    Ok((code, assists, attributes))
 }
 
 fn declaration(contribution: &UiContribution) -> &FormAssistDeclaration {
@@ -219,7 +267,7 @@ pub(super) async fn list(
     ScopedRepository(repository): ScopedRepository,
     ApiQuery(query): ApiQuery<FormAssistsQuery>,
 ) -> Result<Json<FormAssistsResponse>, ApiError> {
-    let (_, assists) =
+    let (_, assists, _) =
         active_assists(&repository, query.blueprint_id, query.blueprint_version).await?;
     Ok(Json(FormAssistsResponse {
         assists: assists
@@ -250,7 +298,7 @@ pub(super) async fn run(
     ActiveWorkspace(workspace): ActiveWorkspace,
     ApiJson(input): ApiJson<FormAssistRequest>,
 ) -> Result<Json<FormAssistResponse>, ApiError> {
-    let (blueprint_code, assists) =
+    let (blueprint_code, assists, attributes) =
         active_assists(&repository, input.blueprint_id, input.blueprint_version).await?;
     let (installation, contribution) = assists
         .into_iter()
@@ -259,12 +307,6 @@ pub(super) async fn run(
         })
         .ok_or_else(|| ApiError::not_found("form assist"))?;
     let declaration = declaration(&contribution).clone();
-    let attributes: HashMap<String, Attribute> = repository
-        .list_attributes(input.blueprint_id, input.blueprint_version)
-        .await?
-        .into_iter()
-        .map(|attribute| (attribute.code.clone(), attribute))
-        .collect();
     let fields: BTreeSet<&String> = declaration
         .watch
         .iter()
@@ -522,6 +564,33 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
+        }
+    }
+
+    #[test]
+    fn assists_watch_and_propose_only_what_a_person_could_enter() {
+        let field = |value_type| attribute("field", value_type, None);
+        assert!(may_watch(&field(ValueType::String)));
+        assert!(may_watch(&field(ValueType::Relationship)));
+        assert!(!may_watch(&field(ValueType::File)));
+        assert!(may_propose(&field(ValueType::Number)));
+        for value_type in [ValueType::Relationship, ValueType::File] {
+            assert!(!may_propose(&field(value_type)), "{value_type:?}");
+        }
+        let readonly = Attribute {
+            readonly: true,
+            ..field(ValueType::String)
+        };
+        let generated = Attribute {
+            generated: Some(json!({"expression": "1"})),
+            ..field(ValueType::Number)
+        };
+        let balance = Attribute {
+            balance: Some(json!({})),
+            ..field(ValueType::Number)
+        };
+        for attribute in [readonly, generated, balance] {
+            assert!(!may_propose(&attribute));
         }
     }
 

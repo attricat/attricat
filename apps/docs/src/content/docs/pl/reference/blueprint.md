@@ -598,7 +598,7 @@ views:
 | `views.detail.extensions` | Akcje rekordu, akcje nagłówka, karty rekordu i asystenci formularza w postaci `<extension-id>/<contribution-id>`, w kolejności wyświetlania. Najwyżej 32. |
 | `views.table.extensions` | Akcje wiersza, zaznaczenia i paska narzędzi Przeglądarki rekordów, w tej samej postaci. Najwyżej 32. |
 
-W widoku pojawiają się tylko kontrybucje, które deklarują ten widok. Stos `detail` bez `children` i `table` bez `columns` zachowują domyślny układ i kolumny. Wpisy dla rozszerzeń, które nie są zainstalowane lub włączone, są zachowywane i ignorowane. Zapis sprawdza obserwowane i proponowane pola włączonego asystenta formularza względem schematu. Tylko schematy rekordów.
+W widoku pojawiają się tylko kontrybucje, które deklarują ten widok. Stos `detail` bez `children` i `table` bez `columns` zachowują domyślny układ i kolumny. Wpisy dla rozszerzeń, które nie są zainstalowane lub włączone, są zachowywane i ignorowane. Zapis sprawdza obserwowane i proponowane pola włączonego asystenta formularza względem schematu; asystent włączony później, którego pola nie pasują, nigdy się nie uruchamia. Formularz rekordu uruchamia najwyżej 8 pierwszych wymienionych asystentów formularza. Tylko schematy rekordów.
 
 ## Publikacja
 
