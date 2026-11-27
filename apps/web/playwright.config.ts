@@ -18,7 +18,18 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      testIgnore: ['navigation.spec.ts', 'frontend-runtime.spec.ts'],
+      testIgnore: [
+        'navigation.spec.ts',
+        'frontend-runtime.spec.ts',
+        'languageSweep.spec.ts',
+      ],
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      // Visits every page in both languages, which takes as long as a third
+      // of the other specs, so CI runs it as a job of its own.
+      name: 'language-sweep',
+      testMatch: 'languageSweep.spec.ts',
       use: { ...devices['Desktop Chrome'] },
     },
     {

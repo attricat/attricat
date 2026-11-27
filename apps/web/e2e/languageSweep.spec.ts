@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { createRecord, createRecordBlueprint, scalar, suffix } from './helpers';
 
 const read = (locale: string) =>
@@ -86,65 +86,95 @@ const visibleTexts = (page: Page) =>
     return texts;
   });
 
+type Locale = 'en' | 'pl';
+
+/**
+ * Visits `paths` in `locale` and fails on raw translation keys, English text
+ * on a Polish page, page errors, console errors and API server errors.
+ */
+const sweep = async (
+  page: Page,
+  testInfo: TestInfo,
+  locale: Locale,
+  paths: readonly string[],
+) => {
+  await page.addInitScript((language) => {
+    // This also runs in extensions' sandboxed frames, which have no storage.
+    if (window.origin !== 'null')
+      localStorage.setItem('attricat.language-choice', language);
+  }, locale);
+  const problems: string[] = [];
+  let current = '';
+  page.on('pageerror', (error) =>
+    problems.push(`${current}: exception ${error.message}`),
+  );
+  page.on('console', (message) => {
+    if (
+      message.type() === 'error' &&
+      !message.text().includes('Failed to load resource')
+    )
+      problems.push(`${current}: console ${message.text()}`);
+  });
+  page.on('response', (response) => {
+    if (
+      response.status() >= 500 &&
+      new URL(response.url()).pathname.startsWith('/api/')
+    )
+      problems.push(`${current}: ${response.status()} ${response.url()}`);
+  });
+  const directory = process.env.E2E_SWEEP_SCREENSHOTS;
+  for (const path of paths) {
+    current = path;
+    await page.goto(path);
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('body')).not.toBeEmpty();
+    for (const text of await visibleTexts(page)) {
+      if (english.has(text))
+        problems.push(`${path}: raw translation key "${text}"`);
+      if (locale === 'pl' && untranslated.has(text))
+        problems.push(`${path}: English text "${text}"`);
+    }
+    if (directory)
+      await page.screenshot({
+        fullPage: true,
+        path: `${directory}/${locale}${path.replaceAll('/', '_')}.png`,
+      });
+  }
+  await testInfo.attach('problems', { body: problems.join('\n') });
+  expect(problems).toEqual([]);
+};
+
+/** Pages per test, so a failure names a short list of pages. */
+const pagesPerTest = 10;
+const pageChunks = Array.from(
+  { length: Math.ceil(staticPages.length / pagesPerTest) },
+  (_, index) =>
+    staticPages.slice(index * pagesPerTest, (index + 1) * pagesPerTest),
+);
+
 for (const locale of ['en', 'pl'] as const) {
-  test(`every page renders in ${locale}`, async ({ page }, testInfo) => {
-    test.setTimeout(240_000);
+  pageChunks.forEach((paths, index) => {
+    test(`pages render in ${locale} (${index + 1}/${pageChunks.length})`, async ({
+      page,
+    }, testInfo) => {
+      test.setTimeout(120_000);
+      await sweep(page, testInfo, locale, paths);
+    });
+  });
+
+  test(`record pages render in ${locale}`, async ({ page }, testInfo) => {
+    test.setTimeout(120_000);
     const blueprint = await createRecordBlueprint(
       `sweep_${suffix()}`,
       'Sweep product',
       'attributes:\n  - code: title\n    value_type: string',
     );
     const record = await createRecord(blueprint, [scalar('title', 'Sweep')]);
-    await page.addInitScript((language) => {
-      // This also runs in extensions' sandboxed frames, which have no storage.
-      if (window.origin !== 'null')
-        localStorage.setItem('attricat.language-choice', language);
-    }, locale);
-    const problems: string[] = [];
-    let current = '';
-    page.on('pageerror', (error) =>
-      problems.push(`${current}: exception ${error.message}`),
-    );
-    page.on('console', (message) => {
-      if (
-        message.type() === 'error' &&
-        !message.text().includes('Failed to load resource')
-      )
-        problems.push(`${current}: console ${message.text()}`);
-    });
-    page.on('response', (response) => {
-      if (
-        response.status() >= 500 &&
-        new URL(response.url()).pathname.startsWith('/api/')
-      )
-        problems.push(`${current}: ${response.status()} ${response.url()}`);
-    });
-    const pages = [
-      ...staticPages,
+    await sweep(page, testInfo, locale, [
       `/records/${record.id}`,
       `/records/${record.id}/changes`,
       `/manage/blueprints/${blueprint.blueprint.id}`,
       '/records/new',
-    ];
-    const directory = process.env.E2E_SWEEP_SCREENSHOTS;
-    for (const path of pages) {
-      current = path;
-      await page.goto(path);
-      await page.waitForLoadState('networkidle');
-      await expect(page.locator('body')).not.toBeEmpty();
-      for (const text of await visibleTexts(page)) {
-        if (english.has(text))
-          problems.push(`${path}: raw translation key "${text}"`);
-        if (locale === 'pl' && untranslated.has(text))
-          problems.push(`${path}: English text "${text}"`);
-      }
-      if (directory)
-        await page.screenshot({
-          fullPage: true,
-          path: `${directory}/${locale}${path.replaceAll('/', '_')}.png`,
-        });
-    }
-    await testInfo.attach('problems', { body: problems.join('\n') });
-    expect(problems).toEqual([]);
+    ]);
   });
 }
