@@ -496,7 +496,7 @@ See [Translate labels](/builders/translations/).
 | `GET` | `/extensions/runtime` | Enabled client contributions. |
 | `PUT` | `/workspace/extensions-mode` | `{"enabled": false}` turns off all extensions in the workspace. |
 | `GET`, `PUT` | `/workspace/extension-layout` | Contribution layout. |
-| `GET`, `PUT`, `DELETE` | `/workspace/extension-secrets[/{name}]` | Secrets (names only on read). |
+| `GET`, `PUT`, `DELETE` | `/extensions/{id}/secrets[/{name}]` | The extension's secrets: declared and set ones by name on read, values write-only. Needs `extensions.manage`, also to read. |
 | `POST` | `/extensions/{id}/operations` | Start an operation. `{"operation_id", "input", "idempotency_key", "source_reference"?, "destination_reference"?}`. Returns `202` with `id`. |
 | `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Runs, outputs, deliveries. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Download an output. |

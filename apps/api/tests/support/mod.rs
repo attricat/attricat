@@ -356,6 +356,9 @@ pub async fn start_session_server(pool: PgPool) -> (String, JoinHandle<()>) {
 }
 
 pub const METRICS_TOKEN: &str = "test-metrics-token";
+/// The `extension_credential_key` every test installs. The key is
+/// process-wide and set once, so all tests in the binary must agree on it.
+pub const TEST_CREDENTIAL_KEY: [u8; 32] = [9; 32];
 pub const BOOTSTRAP_WORKSPACE_ID: &str = "00000000-0000-4000-8000-000000000002";
 /// The default context, seeded by migration `20260814000000_context_hierarchy.sql`.
 pub const DEFAULT_CONTEXT_ID: &str = "00000000-0000-4000-8000-000000000001";

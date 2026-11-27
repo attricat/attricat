@@ -69,7 +69,7 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `storage.extension` | Odczyt i zapis własnego magazynu klucz-wartość rozszerzenia. |
 | `configuration.read` | Odczyt konfiguracji instalacji. |
 | `configuration.write` | Odczyt i zapis konfiguracji zakresowej. |
-| `secrets.read` | Odczyt nazwanych sekretów obszaru roboczego w trakcie działania. |
+| `secrets.read` | Odczyt własnych [sekretów](/pl/extensions/server/#sekrety) rozszerzenia w trakcie działania. Wymagane do zadeklarowania `server.secrets`. |
 | `logging.write` | Zapisywanie komunikatów dziennika. |
 | `artifacts.read`, `artifacts.write` | Odczyt danych wejściowych operacji i zapis danych wyjściowych operacji. |
 | `attricat.annotations.write` | Zapis własnej przestrzeni nazw tagów i metadanych rekordów. Zobacz [Adnotacje rekordów](/pl/extensions/operations/#adnotacje-rekordów). |
@@ -213,6 +213,7 @@ Eksportowane typy zdarzeń muszą zaczynać się od `plugin.<extension-id>.` i k
 | `connections` | Zobacz [Połączenia](#połączenia). | `connections.use` |
 | `exports` | Zobacz [Miejsca docelowe eksportu](#miejsca-docelowe-eksportu). | `exports.mappings` |
 | `webhooks` | Do 16 obiektów `{id, title, max_body_bytes}`. `title` ma najwyżej 200 bajtów; `max_body_bytes`, czyli największa przyjmowana treść żądania i zachowywany ładunek, domyślnie wynosi 65536, a najwyżej 524288. Zobacz [Odbieraj webhooki](/pl/extensions/server/#odbieraj-webhooki). | `webhooks.receive` i artefaktu `server_wasm` |
+| `secrets` | Zobacz [Sekrety](#sekrety). | `secrets.read` |
 
 Procedury obsługi zdarzeń, polecenia, operacje i webhooki wymagają artefaktu `server_wasm`. `handler` to nazwa, którą widzi Twój komponent: polecenia otrzymują ją jako `request.handler`, a operacje jako `operation-id`. Procedury obsługi zdarzeń jej nie otrzymują; zobacz [Która procedura obsługi została wywołana](/pl/extensions/server/#która-procedura-obsługi-została-wywołana).
 
@@ -243,6 +244,26 @@ Rodzaj połączenia opisuje typ konta w miejscu docelowym. Administratorzy tworz
 | `token_header` | `Authorization: Bearer` | `{ "name", "prefix"? }`: nagłówek z tokenem dostępu, z opcjonalnym prefiksem. |
 | `client_authentication` | `body` | Sposób uwierzytelnienia klienta w punkcie końcowym tokenu: `body` (`client_id` i `client_secret` jako pola formularza) lub `basic` (HTTP Basic). |
 | `parameters_schema` | | Obiekt JSON Schema dla niesekretnych parametrów połączenia. |
+
+### Sekrety
+
+Zadeklaruj sekrety, które administrator powinien ustawić, aby karta **Sekrety** rozszerzenia mogła je nazwać i opisać oraz wskazać brakujące wymagane:
+
+```json
+"secrets": [
+  { "name": "api-key", "title": "API key", "description": "Create one under Settings → API in your shop.", "required": true },
+  { "name": "sandbox-api-key", "title": "Sandbox API key" }
+]
+```
+
+| Pole | Opis |
+| --- | --- |
+| `name` | Nazwa, którą komponent przekazuje do `secrets.get.v1` albo podaje w pośredniczonym żądaniu. Litery, cyfry, `.`, `_` i `-`, najwyżej 128 znaków. Unikalna. |
+| `title` | Najwyżej 200 bajtów. |
+| `description` | Opcjonalny. Gdzie znaleźć wartość, najwyżej 1000 bajtów. |
+| `required` | Opcjonalny, domyślnie `false`. Czy rozszerzenie nie może bez niego działać. |
+
+Najwyżej 32 sekrety. Komponent nadal może odczytywać sekrety, których nie deklaruje, na przykład po jednym na punkt końcowy webhooka; administrator dodaje je po nazwie.
 
 ### Miejsca docelowe eksportu
 

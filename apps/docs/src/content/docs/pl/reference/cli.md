@@ -461,16 +461,16 @@ acli extension budget reset <extension-id> <host-permission-id>
 acli extension webhook list <extension-id>
 acli extension webhook create <extension-id> --webhook <webhook-id> --endpoint <name>
 acli extension webhook rotate | delete <extension-id> <endpoint>
-acli extension secret list
-acli extension secret set <name> --value-stdin
-acli extension secret delete <name>
+acli extension secret list <extension_id>
+acli extension secret set <extension_id> <name> --value-stdin
+acli extension secret delete <extension_id> <name>
 acli extension layout get
 acli extension layout set --layout <json-or-file>
 ```
 
 `extension new` tworzy rozszerzenie z natywnym interfejsem w nowym katalogu i nie wymaga serwera; z `--sdk` jego pakiety są linkowane do lokalnej kopii SDK. `extension dev` wymaga serwera deweloperskiego z włączonymi narzędziami deweloperskimi: wgrywa zbudowany pakiet, a następnie przebudowuje go poleceniem `--build` i wgrywa ponownie po każdej zmianie obserwowanej ścieżki, podmieniając Workera zainstalowanego wydania bez ponownego przyznawania uprawnień. Zobacz [Natywny interfejs](/pl/extensions/native/).
 
-Sekrety połączeń i wartości sekretów obszaru roboczego są czytane ze standardowego wejścia, więc nigdy nie trafiają do argumentów procesu; z `--client-secret-stdin` i `--refresh-token-stdin` jednocześnie podaj sekret klienta w pierwszym wierszu. `connection authorize` wymaga sesji przeglądarki (`--session-file`) i zwraca adres autoryzacji u dostawcy, ale wywołanie zwrotne dostawcy kończy autoryzację tylko w sesji, która ją rozpoczęła, a Twoja przeglądarka jej nie ma; autoryzuj w aplikacji internetowej albo użyj `connection exchange-code` z kodem uzyskanym samodzielnie.
+Sekrety połączeń i wartości sekretów rozszerzeń są czytane ze standardowego wejścia, więc nigdy nie trafiają do argumentów procesu; z `--client-secret-stdin` i `--refresh-token-stdin` jednocześnie podaj sekret klienta w pierwszym wierszu. `connection authorize` wymaga sesji przeglądarki (`--session-file`) i zwraca adres autoryzacji u dostawcy, ale wywołanie zwrotne dostawcy kończy autoryzację tylko w sesji, która ją rozpoczęła, a Twoja przeglądarka jej nie ma; autoryzuj w aplikacji internetowej albo użyj `connection exchange-code` z kodem uzyskanym samodzielnie.
 
 `webhook create` i `webhook rotate` wypisują punkt końcowy z jego `url` albo tylko ze ścieżką `path`, gdy wdrożenie nie ma ustawionego `EXTENSION_WEBHOOK_BASE_URL`. Adres jest pokazywany tylko ten jeden raz, więc od razu go zapisz. Zobacz [Webhooki](/pl/builders/extensions/#webhooki).
 

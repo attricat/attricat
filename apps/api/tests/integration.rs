@@ -43,6 +43,7 @@ mod extension_export_scale;
 mod extension_field_notes;
 mod extension_interactive_operations;
 mod extension_registries;
+mod extension_secrets;
 mod extension_unified_abi;
 mod extension_webhooks;
 mod extensions;

@@ -3164,7 +3164,13 @@ async fn extension_connection_export_and_run_commands_build_requests() {
         budget["path"],
         "/extensions/acme.erp/host-permission-budgets/erp-api"
     );
-    assert!(Cli::try_parse_from(["acli", "extension", "secret", "set", "token"]).is_err());
+    let secrets = echo(&["extension", "secret", "list", "acme.erp"]).await;
+    assert_eq!(secrets["path"], "/extensions/acme.erp/secrets");
+    let deleted = echo(&["extension", "secret", "delete", "acme.erp", "api-key"]).await;
+    assert_eq!(deleted["path"], "/extensions/acme.erp/secrets/api-key");
+    assert!(
+        Cli::try_parse_from(["acli", "extension", "secret", "set", "acme.erp", "token"]).is_err()
+    );
 }
 
 #[test]
@@ -3181,6 +3187,7 @@ fn token_stdin_rejects_commands_that_also_read_stdin() {
         "extension",
         "secret",
         "set",
+        "acme.erp",
         "token",
         "--value-stdin",
     ])

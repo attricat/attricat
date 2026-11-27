@@ -1282,16 +1282,6 @@ async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sq
         .set_workspace_extensions_enabled(true)
         .await
         .unwrap();
-    repository
-        .put_workspace_extension_secret("client-secret", "s3cret")
-        .await
-        .unwrap();
-    assert!(
-        repository
-            .delete_workspace_extension_secret("client-secret")
-            .await
-            .unwrap()
-    );
 
     let audits: Vec<(String, Option<Uuid>, Value)> = sqlx::query_as(
         "SELECT action, actor_user_id, metadata FROM audit_events WHERE request_id = $1 ORDER BY occurred_at, action",
@@ -1306,8 +1296,6 @@ async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sq
         [
             "workspace.extension_layout.set",
             "workspace.extensions_mode.set",
-            "workspace.extension_secret.put",
-            "workspace.extension_secret.delete",
         ]
     );
     assert!(
@@ -1319,11 +1307,6 @@ async fn workspace_extension_settings_audit_once_with_the_request_actor(pool: sq
         audits
             .iter()
             .all(|(.., metadata)| metadata["method"] == "PUT")
-    );
-    assert!(
-        audits
-            .iter()
-            .all(|(.., metadata)| !metadata.to_string().contains("s3cret"))
     );
 }
 

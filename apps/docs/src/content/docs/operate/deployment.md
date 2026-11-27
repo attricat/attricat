@@ -82,7 +82,7 @@ cd ../..
 docker compose --env-file deploy/.env.production -f deploy/compose.yml up -d
 ```
 
-Leave a file empty to turn its feature off. Single sign-on needs `identity_provider_credential_key`, extension connections need `extension_credential_key`, and the operator API needs `operator_api_token`. Every setting is described in the [configuration reference](/reference/configuration/).
+Leave a file empty to turn its feature off. Single sign-on needs `identity_provider_credential_key`, extension connections and secrets need `extension_credential_key`, and the operator API needs `operator_api_token`. Every setting is described in the [configuration reference](/reference/configuration/).
 
 ## First start
 

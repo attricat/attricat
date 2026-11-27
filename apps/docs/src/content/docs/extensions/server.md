@@ -202,7 +202,9 @@ A command runs with the extension's grants, not the user's permissions. Check in
 
 ## Secrets
 
-With `secrets.read`, `secrets.get.v1` with `{"name": "destination-token"}` returns `{"value": "…"}` for the current invocation only. Secret values never appear in configuration, logs, traces, errors, or audit records.
+With `secrets.read`, `secrets.get.v1` with `{"name": "destination-token"}` returns `{"value": "…"}` for the current invocation only. Secrets belong to your extension: you read only the ones an administrator set for it, never another extension's, and a name nobody set returns an error. Secret values never appear in configuration, logs, traces, errors, or audit records.
+
+[Declare](/extensions/manifest/#secrets) the secrets you expect in `server.secrets`, so administrators see what to set.
 
 ## Call external services
 
@@ -235,7 +237,7 @@ The broker never retries. A timeout or connection failure is an **uncertain outc
 
 - a query string in `url`, if the matching rule sets `allow_query: true`, for parameters such as `?marketplaceIds=` or presigned URLs. Query values never appear in logs, traces, metrics, errors, or the stored delivery history;
 - `body_base64` for a binary body, instead of `body`;
-- `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, which puts workspace secrets into a form or JSON body. A JSON `field` is a top-level key or a JSON pointer. The component never sees the secret;
+- `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, which puts the extension's secrets into a form or JSON body. A JSON `field` is a top-level key or a JSON pointer. The component never sees the secret;
 - `connection`, which adds the [connection's](/extensions/exports/#connections) access token to the request.
 
 ```json

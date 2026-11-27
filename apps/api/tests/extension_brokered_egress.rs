@@ -213,7 +213,7 @@ fn shared_mock() -> (std::net::SocketAddr, Shared) {
             resolve: vec![("*.mock.test".into(), address)],
             extra_root_certificates_pem: mock_ca_pem(),
         });
-        api::repository::use_extension_credential_key([9; 32]);
+        api::repository::use_extension_credential_key(TEST_CREDENTIAL_KEY);
         (address, seen)
     })
     .clone()
@@ -306,7 +306,7 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
     }
     repository.enable_extension(EXTENSION).await.unwrap();
     repository
-        .put_workspace_extension_secret("lwa-client-secret", "lwa-s&cret")
+        .put_extension_secret(EXTENSION, "lwa-client-secret", "lwa-s&cret")
         .await
         .unwrap();
     repository
@@ -374,7 +374,7 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
     .unwrap();
     assert!(!stored.windows(6).any(|window| window == b"tok-cc"));
 
-    // Workspace secrets are substituted into form bodies by the host.
+    // Extension secrets are substituted into form bodies by the host.
     let lwa = call(
         "network.request.v2",
         json!({

@@ -63,3 +63,9 @@ export const pendingGrants = (manifest: unknown, grants: ExtensionGrant[]) => {
     (item) => !granted.has(grantKey(item.kind, item.id)),
   );
 };
+
+/** Whether the manifest requests `capability`, as a required or optional permission. */
+export const requestsCapability = (manifest: unknown, capability: string) =>
+  requestedGrants(manifest).some(
+    (item) => item.kind === 'capability' && item.id === capability,
+  );

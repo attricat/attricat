@@ -390,13 +390,31 @@ described in [Inter-extension events](#inter-extension-events).
 
 ### Mediated secrets and HTTPS
 
-Workspace operators manage named extension secrets at
-`/workspace/extension-secrets`; listing returns names only and values are
-write-only. A component with `secrets.read` may call
-`secrets.get.v1` with `{"name":"destination-token"}` and receives
-`{"value":"..."}` only in that component invocation. There is no list API,
-and values are never copied into manifests, configuration, operation snapshots,
-audit records, logs, traces, or errors.
+Each secret belongs to one extension installation. Operators with
+`extensions.manage` set, replace and delete them at
+`/extensions/{extension_id}/secrets[/{name}]` (also to list: even names are
+management data). Values are write-only; `GET` returns the release's declared
+secrets merged with the set ones, by name only, with `declared`, `title`,
+`description`, `required`, `set` and timestamps. A component with
+`secrets.read` may call `secrets.get.v1` with `{"name":"destination-token"}`
+and receives `{"value":"..."}` only in that component invocation, and only for
+a secret set for its own extension; another extension's secret of the same
+name is unavailable, exactly like a missing one. There is no component list
+API, and values are never copied into manifests, configuration, operation
+snapshots, audit records, logs, traces, or errors.
+
+Values are stored only in `extension_secrets.value_ciphertext`, as AES-256-GCM
+ciphertext under the `extension_credential_key` secret, with the associated
+data `attricat.extension_secret:{workspace_id}:{extension_id}:{name}`, so a
+ciphertext moved to another row does not open. Without the key, setting or
+reading a secret fails with `service_unavailable`. Removing the extension
+deletes its secrets with its other per-installation state.
+
+A manifest may declare `server.secrets`: at most 32 entries of `{name, title,
+description?, required?}` (requires `secrets.read`). Declarations only inform
+management, which lists them and warns about required ones that are not set;
+a component may still read undeclared names, such as one secret per webhook
+endpoint.
 
 A component with `network.request` calls `network.request.v1` with
 `host_permission_id`, `method`, `url`, optional UTF-8 `body`, optional safe
@@ -1518,7 +1536,7 @@ unavailable to export runs.
   logs, traces, metrics, errors or the persisted delivery history;
 - `body_base64` for binary bodies (instead of `body`);
 - `secret_body: {format: "form" | "json", fields: [{field, secret}]}`, which
-  substitutes workspace secrets into a form or JSON body (a JSON `field` is a
+  substitutes the extension's secrets into a form or JSON body (a JSON `field` is a
   top-level key or a JSON pointer), so the component never sees, for example,
   an LWA client secret;
 - `connection`, which injects the [connection's](#credential-connections) access

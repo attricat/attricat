@@ -18,7 +18,7 @@ Obraz Attricat nie zawiera `pg_dump`, `pg_restore` ani narzędzi S3. Użyj narz�
 
 Jeśli Twój dostawca potrafi wykonać migawki bazy danych i zasobnika w tym samym punkcie zatrzymania, użyj ich zamiast tego.
 
-Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach, logach ani manifeście. Zachowaj `identity_provider_credential_key` i `extension_credential_key` tak długo jak kopie, które ich potrzebują: baza przechowuje sekrety klientów i poświadczenia połączeń zaszyfrowane tymi kluczami, więc po przywróceniu bez nich obszary robocze muszą ponownie podać sekrety dostawców tożsamości, a każde połączenie rozszerzenia trzeba skonfigurować od nowa.
+Przechowuj dane uwierzytelniające w menedżerze sekretów, a nie w poleceniach, logach ani manifeście. Zachowaj `identity_provider_credential_key` i `extension_credential_key` tak długo jak kopie, które ich potrzebują: baza przechowuje sekrety klientów, poświadczenia połączeń i sekrety rozszerzeń zaszyfrowane tymi kluczami, więc po przywróceniu bez nich obszary robocze muszą ponownie podać sekrety dostawców tożsamości, a każde połączenie i sekret rozszerzenia trzeba skonfigurować od nowa.
 
 ## Przećwicz przywracanie
 

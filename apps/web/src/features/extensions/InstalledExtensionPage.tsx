@@ -31,9 +31,12 @@ import {
 } from './managementApi';
 import {
   installedExtensionTabs,
+  secretsReadCapability,
   type InstalledExtensionTab,
 } from './constants';
-import { pendingGrants } from './extensionGrants';
+import { pendingGrants, requestsCapability } from './extensionGrants';
+import { extensionSecretsOptions } from './queryOptions';
+import { ExtensionSecretsSection } from './ExtensionSecretsSection';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
 import {
   installedExtensionDescription,
@@ -57,6 +60,7 @@ import {
   ExportIcon,
   ExtensionConnectionIcon,
   ExtensionIcon,
+  ExtensionSecretIcon,
   ExtensionWebhookIcon,
   PermissionIcon,
 } from '../../components/systemIcons';
@@ -77,6 +81,7 @@ const tabIcons = {
   [installedExtensionTabs.exports]: ExportIcon,
   [installedExtensionTabs.connections]: ExtensionConnectionIcon,
   [installedExtensionTabs.webhooks]: ExtensionWebhookIcon,
+  [installedExtensionTabs.secrets]: ExtensionSecretIcon,
   [installedExtensionTabs.lifecycle]: HistoryIcon,
 } satisfies Record<InstalledExtensionTab, LucideIcon>;
 
@@ -129,6 +134,17 @@ const InstalledExtensionTabs = ({
   const pending = pendingGrants(installation.manifest, grants).length;
   const manifest = manifestExportsSchema.safeParse(installation.manifest).data;
   const webhooks = manifestWebhooks(installation.manifest);
+  // Listing secrets, even by name, needs extension management.
+  const showSecrets =
+    canManage &&
+    requestsCapability(installation.manifest, secretsReadCapability);
+  const secrets = useQuery({
+    ...extensionSecretsOptions(extensionId),
+    enabled: showSecrets,
+  });
+  const missingSecrets =
+    secrets.data?.filter((secret) => secret.required && !secret.set).length ??
+    0;
   const panels: { content: ReactNode; key: InstalledExtensionTab }[] = [
     {
       key: installedExtensionTabs.overview,
@@ -152,6 +168,23 @@ const InstalledExtensionTabs = ({
               severity="warning"
             >
               {t('extensions.pendingPermissions', { count: pending })}
+            </Alert>
+          )}
+          {missingSecrets > 0 && (
+            <Alert
+              action={
+                <RouterButton
+                  color="inherit"
+                  params={{ extensionId }}
+                  search={{ tab: installedExtensionTabs.secrets }}
+                  to="/manage/extensions/$extensionId"
+                >
+                  {t('extensions.reviewSecrets')}
+                </RouterButton>
+              }
+              severity="warning"
+            >
+              {t('extensions.missingSecrets', { count: missingSecrets })}
             </Alert>
           )}
           <ExtensionUpgradeSection
@@ -230,6 +263,19 @@ const InstalledExtensionTabs = ({
                 canManage={canManage}
                 extensionId={extensionId}
                 webhooks={webhooks}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(showSecrets
+      ? [
+          {
+            key: installedExtensionTabs.secrets,
+            content: (
+              <ExtensionSecretsSection
+                canManage={canManage}
+                extensionId={extensionId}
               />
             ),
           },

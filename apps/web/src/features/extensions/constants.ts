@@ -160,6 +160,7 @@ export const installedExtensionTabs = {
   exports: 'exports',
   connections: 'connections',
   webhooks: 'webhooks',
+  secrets: 'secrets',
   lifecycle: 'lifecycle',
 } as const;
 export type InstalledExtensionTab =
@@ -184,6 +185,9 @@ export const extensionCapabilities = {
   refresh: 'client.refresh',
   storage: 'storage.extension',
 } as const;
+
+/** The capability that lets an extension's component read its secrets. */
+export const secretsReadCapability = 'secrets.read';
 
 /** Versioned host/frame MessageChannel protocol message types. */
 export const extensionMessageTypes = {
@@ -305,11 +309,10 @@ export const extensionManagementTabIndex = {
   installed: 0,
   marketplace: 1,
   layout: 2,
-  secrets: 3,
 } as const;
 
 /**
- * Bounds of a workspace extension secret, as the host accepts it: the name an
+ * Bounds of an extension secret, as the host accepts it: the name an
  * extension asks for in `secrets.get.v1` and the value stored under it.
  */
 export const extensionSecretLimits = {

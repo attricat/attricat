@@ -220,6 +220,16 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
+    // Even secret names are management data, as they were when secrets
+    // belonged to the workspace.
+    if path == "/extensions/{extension_id}/secrets"
+        || path == "/extensions/{extension_id}/secrets/{name}"
+    {
+        return Some(Policy {
+            permission: Permission::ExtensionsManage,
+            target: TargetKind::None,
+        });
+    }
     if path == "/extensions"
         || path == "/extensions/sideload"
         || path.starts_with("/extensions/{extension_id}")
@@ -294,10 +304,7 @@ pub(super) fn policy(method: &Method, path: &str) -> Option<Policy> {
             target: TargetKind::None,
         });
     }
-    if path == "/workspace/extensions-mode"
-        || path == "/workspace/extension-secrets"
-        || path.starts_with("/workspace/extension-secrets/")
-    {
+    if path == "/workspace/extensions-mode" {
         return Some(Policy {
             permission: Permission::ExtensionsManage,
             target: TargetKind::None,
@@ -613,6 +620,20 @@ mod tests {
                 Permission::MembersManage
             );
             assert_eq!(additional_permission(path), Some(Permission::RolesGrant));
+        }
+    }
+
+    #[test]
+    fn extension_secrets_need_extension_management_even_to_list() {
+        for (method, path) in [
+            (Method::GET, "/extensions/{extension_id}/secrets"),
+            (Method::PUT, "/extensions/{extension_id}/secrets/{name}"),
+            (Method::DELETE, "/extensions/{extension_id}/secrets/{name}"),
+        ] {
+            assert_eq!(
+                policy(&method, path).map(|policy| policy.permission),
+                Some(Permission::ExtensionsManage)
+            );
         }
     }
 

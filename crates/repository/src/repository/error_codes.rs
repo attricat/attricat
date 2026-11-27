@@ -438,6 +438,11 @@ impl RepositoryError {
                 Code::ServiceUnavailable,
                 "identity providers are not available on this deployment",
             ),
+            Self::ExtensionCredentialKeyMissing => ErrorDescription::new(
+                Unavailable,
+                Code::ServiceUnavailable,
+                "extension connections and secrets are not available on this deployment",
+            ),
             Self::AttributeNotApplicable => plain(Unprocessable, Code::AttributeNotApplicable),
             Self::InvalidFilePolicy => plain(Unprocessable, Code::InvalidFilePolicy),
             Self::InvalidSystemMetadata => plain(Unprocessable, Code::InvalidSystemMetadata),

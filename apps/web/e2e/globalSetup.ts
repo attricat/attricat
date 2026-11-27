@@ -289,6 +289,8 @@ export default async () => {
     bootstrap_owner_password: bootstrapOwnerPassword,
     // .env can set OIDC_CALLBACK_URL, which needs this key.
     identity_provider_credential_key: randomBytes(32).toString('base64'),
+    // Extension connections and secrets are encrypted under this key.
+    extension_credential_key: randomBytes(32).toString('base64'),
   });
   const apiEnv: NodeJS.ProcessEnv = {
     ...process.env,

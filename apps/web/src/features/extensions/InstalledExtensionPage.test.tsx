@@ -19,6 +19,7 @@ import '../../i18n';
 import { InstalledExtensionPage } from './InstalledExtensionPage';
 import {
   extensionDetail,
+  extensionSecrets,
   extensionUpdates,
   registryDetails,
   removeExtension,
@@ -33,6 +34,7 @@ import {
 vi.mock('../auth/useCan', () => ({ useCan: () => true }));
 vi.mock('./managementApi', () => ({
   extensionDetail: vi.fn(),
+  extensionSecrets: vi.fn(),
   extensionUpdates: vi.fn(),
   lifecycleExtension: vi.fn(),
   registryDetails: vi.fn(),
@@ -51,6 +53,9 @@ vi.mock('../extension-exports/ExtensionConnectionsSection', () => ({
 }));
 vi.mock('../extension-webhooks/ExtensionWebhooksSection', () => ({
   ExtensionWebhooksSection: () => <p>webhooks</p>,
+}));
+vi.mock('./ExtensionSecretsSection', () => ({
+  ExtensionSecretsSection: () => <p>secrets</p>,
 }));
 
 const registrySource = 'github:attricat/example@v1.0.0';
@@ -233,6 +238,29 @@ describe('InstalledExtensionPage', () => {
       'Webhooks',
       'Lifecycle',
     ]);
+  });
+
+  it('adds the secrets tab and warns about required secrets that are not set', async () => {
+    vi.mocked(extensionSecrets).mockResolvedValue([
+      { name: 'api-key', declared: true, required: true, set: false },
+      { name: 'sandbox', declared: true, required: false, set: false },
+    ]);
+    await renderPage({
+      optional_permissions: ['secrets.read'],
+      server: { secrets: [{ name: 'api-key', title: 'API key' }] },
+    });
+    expect(tabNames()).toEqual([
+      'Overview',
+      'Configuration',
+      'Permissions',
+      'Secrets',
+      'Lifecycle',
+    ]);
+    expect(
+      await screen.findByText('1 required secret is not set.'),
+    ).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Set secrets' })).toBeTruthy();
+    expect(extensionSecrets).toHaveBeenCalledWith('example');
   });
 
   it('falls back to the overview for a tab this extension does not have', async () => {
