@@ -295,7 +295,10 @@ describe('form assist suggestions', () => {
       }),
       expect.any(AbortSignal),
     );
-    expect(form.view.result.current.notes.price).toBe('Customer price');
+    // The note can land a render after the value.
+    await waitFor(() =>
+      expect(form.view.result.current.notes.price).toBe('Customer price'),
+    );
   });
 
   it('never replaces a field the user edited, and says so to the assist', async () => {

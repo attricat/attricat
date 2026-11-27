@@ -20,7 +20,9 @@ export const EmptyValue = ({ label: override }: { label?: string } = {}) => {
         color="text.secondary"
         component="span"
         // Matches the text around it; a wider target than the dash alone that keeps its place in the layout.
-        sx={{ mx: -0.5, px: 0.5 }}
+        // Positioned so the hidden label stays inside the cell: otherwise it
+        // escapes a horizontally scrolled table and widens the page.
+        sx={{ mx: -0.5, position: 'relative', px: 0.5 }}
         variant="inherit"
       >
         <span aria-hidden="true">{placeholder}</span>
