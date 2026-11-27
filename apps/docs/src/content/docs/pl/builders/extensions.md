@@ -33,7 +33,7 @@ Włączenie się nie powiedzie, jeśli wymagane uprawnienie nie zostało przyzna
 
 ## Uaktualnienia
 
-Rozszerzenie zainstalowane z rejestru pokazuje **Dostępna aktualizacja**, gdy jego rejestr wymienia nowszą wersję, którą ten serwer może uruchomić. Uaktualnienie rozpoczniesz przyciskiem **Aktualizuj** na liście **Zainstalowane**, na stronie rozszerzenia albo na jego stronie na rynku; Attricat najpierw prosi o potwierdzenie. Rozszerzenie zainstalowane z archiwum uaktualnisz przyciskiem **Uaktualnij z archiwum** na jego stronie.
+Rozszerzenie zainstalowane z rejestru pokazuje **Dostępna aktualizacja**, gdy jego rejestr wymienia nowszą wersję, którą ten serwer może uruchomić. Uaktualnienie rozpoczniesz przyciskiem **Aktualizuj** na liście **Zainstalowane** albo na jego stronie na rynku, albo przyciskiem **Uaktualnij do v…** na stronie rozszerzenia; Attricat najpierw prosi o potwierdzenie. Rozszerzenie zainstalowane z archiwum uaktualnisz przyciskiem **Uaktualnij z archiwum** na jego stronie.
 
 Uaktualnienie przełącza instalację na nowsze wydanie. Przyznane uprawnienia i konfiguracja zostają, jeśli nadal obowiązują, a włączone rozszerzenie pozostaje włączone, gdy nie ma nic nowego do sprawdzenia.
 

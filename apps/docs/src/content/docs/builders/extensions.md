@@ -33,7 +33,7 @@ Enabling fails if a required permission is not granted, the configuration is inv
 
 ## Upgrades
 
-An extension installed from a registry shows **Update available** when its registry lists a newer version this server can run. Start the upgrade with **Update** in the **Installed** list, on the extension's page, or on its marketplace page; Attricat asks you to confirm first. An extension installed from an archive is upgraded with **Upgrade from archive** on its page.
+An extension installed from a registry shows **Update available** when its registry lists a newer version this server can run. Start the upgrade with **Update** in the **Installed** list or on its marketplace page, or with **Upgrade to v…** on the extension's page; Attricat asks you to confirm first. An extension installed from an archive is upgraded with **Upgrade from archive** on its page.
 
 Upgrading switches the installation to a newer release. Grants and configuration carry over when they still apply, and an enabled extension stays enabled if there is nothing new for you to review.
 

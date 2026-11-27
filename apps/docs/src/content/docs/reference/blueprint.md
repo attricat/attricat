@@ -98,7 +98,7 @@ attributes:
 - It is a snapshot: a later change to the product's price does not change existing lines, and a value you enter always wins.
 - The value is read in the relationship's context, with the source attribute's context fallback, and only from records the person saving can read. When there is nothing to copy, such as a service without a price, the attribute stays empty and the save still succeeds.
 - The record history marks a copied value as filled in from the related record.
-- In the web app, choosing a record fills these fields at once, in the record form and in a new row of a table of linked records such as an invoice's lines, and names the record the value came from. A new line also gets the values it copies from the invoice as soon as the row opens. A field you have typed in is never changed.
+- In the web app, choosing a record for a new record fills these fields at once, in the record form and in a new row of a table of linked records such as an invoice's lines, and names the record the value came from. A new line also gets the values it copies from the invoice as soon as the row opens. A field you have typed in is never changed. When you edit an existing record, the form shows nothing first, and saving applies the rule.
 
 `default_from` cannot be combined with `default_value`, `generated`, `balance`, a status or an assignment.
 

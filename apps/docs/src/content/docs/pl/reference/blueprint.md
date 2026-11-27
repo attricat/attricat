@@ -98,7 +98,7 @@ attributes:
 - To migawka: późniejsza zmiana ceny produktu nie zmienia istniejących pozycji, a wpisana wartość zawsze wygrywa.
 - Wartość jest odczytywana w kontekście relacji, z dziedziczeniem atrybutu źródłowego, i tylko z rekordów, które może odczytać osoba zapisująca. Gdy nie ma czego skopiować, np. usługa nie ma ceny, atrybut pozostaje pusty, a zapis i tak się udaje.
 - Historia rekordu oznacza skopiowaną wartość jako uzupełnioną z powiązanego rekordu.
-- W aplikacji webowej wybranie rekordu od razu wypełnia te pola, w formularzu rekordu i w nowym wierszu tabeli powiązanych rekordów, np. pozycji faktury, i podaje rekord, z którego pochodzi wartość. Nowa pozycja dostaje też wartości kopiowane z faktury, gdy tylko wiersz się otworzy. Pole, w którym coś wpisano, nigdy nie jest zmieniane.
+- W aplikacji webowej wybranie rekordu dla nowego rekordu od razu wypełnia te pola, w formularzu rekordu i w nowym wierszu tabeli powiązanych rekordów, np. pozycji faktury, i podaje rekord, z którego pochodzi wartość. Nowa pozycja dostaje też wartości kopiowane z faktury, gdy tylko wiersz się otworzy. Pole, w którym coś wpisano, nigdy nie jest zmieniane. Przy edycji istniejącego rekordu formularz niczego wcześniej nie pokazuje, a regułę stosuje zapis.
 
 `default_from` nie może występować razem z `default_value`, `generated`, `balance`, statusem ani przypisaniem.
 
