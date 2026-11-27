@@ -29,6 +29,11 @@ export const ExtensionSecretDialog = ({
 }: Props) => {
   const { t } = useTranslation();
   const save = useMutation({
+    // The page shows its own message.
+    meta: { toast: false },
+    // The value is write-only, so the mutation leaves the cache as soon as
+    // the dialog closes instead of keeping it for the default five minutes.
+    gcTime: 0,
     mutationFn: putWorkspaceExtensionSecret,
     onSuccess: (_, { name }) => onSaved(name),
   });

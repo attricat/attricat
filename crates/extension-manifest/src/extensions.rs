@@ -125,6 +125,20 @@ pub const MAX_HOST_TIMEOUT_MILLIS: u64 = 60_000;
 /// The largest bulk transfer a host permission may grant.
 pub const MAX_HOST_TRANSFER_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
+/// The most bytes in a workspace extension secret's value.
+pub const MAX_EXTENSION_SECRET_VALUE_BYTES: usize = 65_536;
+
+/// Whether `name` can name a workspace extension secret, by the same rule
+/// the runtime applies when an extension reads one: up to
+/// [`MAX_EXTENSION_IDENTIFIER_BYTES`] of ASCII letters, digits, `.`, `_`
+/// and `-`.
+pub fn valid_extension_secret_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= MAX_EXTENSION_IDENTIFIER_BYTES
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
+}
 /// Initial interactive operations keep the Explorer bulk-selection bound; a
 /// larger, server-managed selection resource is a separate contract.
 pub const MAX_INTERACTIVE_SELECTION: u32 = 50;
@@ -3317,6 +3331,18 @@ pub fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestErro
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secret_names_follow_the_runtime_rule() {
+        let longest = "a".repeat(MAX_EXTENSION_IDENTIFIER_BYTES);
+        for valid in ["client-secret", "acme.token_1", longest.as_str()] {
+            assert!(valid_extension_secret_name(valid), "{valid}");
+        }
+        let too_long = "a".repeat(MAX_EXTENSION_IDENTIFIER_BYTES + 1);
+        for invalid in ["", "has space", "slash/name", "ąę", too_long.as_str()] {
+            assert!(!valid_extension_secret_name(invalid), "{invalid}");
+        }
+    }
 
     #[test]
     fn host_api_ranges_must_accept_the_supported_abi() {

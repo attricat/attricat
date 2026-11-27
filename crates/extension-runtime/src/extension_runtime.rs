@@ -1832,15 +1832,10 @@ fn parse_host_request<T: for<'de> Deserialize<'de>>(
     serde_json::from_str(request).map_err(|_| format!("invalid {label}"))
 }
 fn valid_secret_name(name: &str) -> Result<(), String> {
-    if name.is_empty()
-        || name.len() > MAX_EXTENSION_IDENTIFIER_BYTES
-        || !name
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'_' | b'-'))
-    {
-        Err("invalid secret reference".into())
-    } else {
+    if attricat_extension_manifest::extensions::valid_extension_secret_name(name) {
         Ok(())
+    } else {
+        Err("invalid secret reference".into())
     }
 }
 

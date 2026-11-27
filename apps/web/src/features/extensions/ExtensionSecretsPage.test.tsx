@@ -38,6 +38,7 @@ const renderPage = (session: object = managerSession) => {
       <ExtensionSecretsPage />
     </QueryClientProvider>,
   );
+  return client;
 };
 
 describe('ExtensionSecretsPage', () => {
@@ -63,7 +64,7 @@ describe('ExtensionSecretsPage', () => {
     vi.mocked(workspaceExtensionSecrets).mockResolvedValue([secret]);
     vi.mocked(putWorkspaceExtensionSecret).mockResolvedValue(undefined);
     const user = userEvent.setup();
-    renderPage();
+    const client = renderPage();
     await screen.findByRole('table', { name: 'Secrets' });
 
     await user.click(screen.getByRole('button', { name: 'Add secret' }));
@@ -94,6 +95,17 @@ describe('ExtensionSecretsPage', () => {
       ),
     );
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    // The write-only value does not stay in the query client's cache.
+    await waitFor(() =>
+      expect(
+        JSON.stringify(
+          client
+            .getMutationCache()
+            .getAll()
+            .map((mutation) => mutation.state.variables),
+        ),
+      ).not.toContain('s3cret'),
+    );
   });
 
   it('replaces the value of an existing secret', async () => {

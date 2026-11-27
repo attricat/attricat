@@ -17,8 +17,9 @@ use crate::{
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
         ContributionTranslation, ContributionView, EditorDeclaration, FORM_ASSIST_CAPABILITY,
-        Manifest, RECORD_FIELD_NOTES_CAPABILITY, RenderingMode, SUPPORTED_HOST_API,
-        UiContributionKind, UiOutlet, valid_contribution_key,
+        MAX_EXTENSION_SECRET_VALUE_BYTES, Manifest, RECORD_FIELD_NOTES_CAPABILITY, RenderingMode,
+        SUPPORTED_HOST_API, UiContributionKind, UiOutlet, valid_contribution_key,
+        valid_extension_secret_name,
     },
 };
 
@@ -542,7 +543,10 @@ impl AttricatRepository {
         name: &str,
         value: &str,
     ) -> Result<(), RepositoryError> {
-        if !valid_contribution_key(&format!("x:{name}")) || value.is_empty() || value.len() > 65_536
+        // The runtime's own rule, so every secret saved can also be read.
+        if !valid_extension_secret_name(name)
+            || value.is_empty()
+            || value.len() > MAX_EXTENSION_SECRET_VALUE_BYTES
         {
             return Err(RepositoryError::InvalidExtension(
                 "invalid workspace extension secret".into(),

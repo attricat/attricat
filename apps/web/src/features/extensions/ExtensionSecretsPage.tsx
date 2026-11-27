@@ -69,6 +69,8 @@ export const ExtensionSecretsPage = () => {
       queryKey: extensionManagementQueryKeys.secrets(),
     });
   const remove = useMutation({
+    // The page shows its own message.
+    meta: { toast: false },
     mutationFn: deleteWorkspaceExtensionSecret,
     onSuccess: async (_, name) => {
       setDeleting({ name, open: false });
