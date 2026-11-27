@@ -157,10 +157,23 @@ describe('default_from suggestions', () => {
     );
     expect(form.fields().price).toBe('20');
 
+    // A failed preview leaves the field to the save's own rule, never the
+    // previous target's value.
     api.getDefaultValues.mockRejectedValueOnce(new Error('offline'));
     await form.pick(first);
     await waitFor(() => expect(api.getDefaultValues).toHaveBeenCalledTimes(3));
-    expect(form.fields().price).toBe('20');
+    expect(form.fields().price).toBe('');
+  });
+
+  it("withdraws the previous target's values as soon as another is picked", async () => {
+    const form = renderSuggestions();
+    await form.pick(first);
+    await waitFor(() => expect(form.fields().price).toBe('10'));
+    api.getDefaultValues.mockImplementationOnce(() => new Promise(() => {}));
+    await form.pick(second);
+    // Saving now must not store the first item's price for the second.
+    expect(form.fields().price).toBe('');
+    expect(form.view.result.current.notes.price).toBeUndefined();
   });
 
   it('empties its default when the item is cleared', async () => {
@@ -312,6 +325,26 @@ describe('form assist suggestions', () => {
     await waitFor(() => expect(assistApi.runFormAssist).toHaveBeenCalled());
     expect(assistApi.runFormAssist.mock.calls[0]![0].edited).toEqual(['price']);
     expect(form.fields().price).toBe('12');
+  });
+
+  it('withdraws its proposals when a watched field changes, even if the next call fails', async () => {
+    assistApi.runFormAssist.mockResolvedValueOnce(
+      answer([{ attribute_code: 'price', value: 30 }]),
+    );
+    const form = renderAssists();
+    await form.ready();
+    await form.type('quantity', '3');
+    await waitFor(() => expect(form.fields().price).toBe('30'));
+    assistApi.runFormAssist.mockResolvedValue({
+      outcome: 'timed_out',
+      proposals: [],
+    });
+    await form.type('quantity', '4');
+    expect(form.fields().price).toBe('');
+    await waitFor(() =>
+      expect(assistApi.runFormAssist).toHaveBeenCalledTimes(2),
+    );
+    expect(form.fields().price).toBe('');
   });
 
   it('ignores answers to values that changed and failed calls', async () => {

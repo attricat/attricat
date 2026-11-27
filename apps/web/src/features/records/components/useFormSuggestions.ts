@@ -108,11 +108,12 @@ export const useDefaultFromSuggestions = ({
     ).map((dependent) => dependent.code);
     if (scope.length === 0) return;
     pending.current.get(attribute.code)?.abort();
+    // The previous target's values stop applying now, not when the new
+    // preview answers: saving in between, or after a failed preview, would
+    // otherwise store them for the new target. The save applies the rule.
+    offer(suggestionSources.defaultFrom, scope, []);
     const [target, ...others] = relationshipIdsForField(value);
-    if (!target || others.length > 0) {
-      offer(suggestionSources.defaultFrom, scope, []);
-      return;
-    }
+    if (!target || others.length > 0) return;
     const controller = new AbortController();
     pending.current.set(attribute.code, controller);
     getDefaultValues(
@@ -158,9 +159,10 @@ const assistKey = (assist: FormAssist) => `${assist.extension_id}:${assist.id}`;
 /**
  * Runs the blueprint's extension form assists while a new record is entered:
  * a change to a watched field calls the assist once the user pauses, and its
- * proposals fill the proposed fields the user has not edited. An answer to
- * values that changed meanwhile, a failure and a timeout leave the form as it
- * is. Only the form calls assists; saving does not.
+ * proposals fill the proposed fields the user has not edited. Changing a
+ * watched field withdraws the assist's earlier proposals; an answer to values
+ * that changed meanwhile, a failure and a timeout propose nothing. Only the
+ * form calls assists; saving does not.
  */
 export const useFormAssistSuggestions = ({
   blueprint,
@@ -288,6 +290,9 @@ export const useFormAssistSuggestions = ({
     );
     for (const assist of watching) {
       const key = assistKey(assist);
+      // Proposals for the old values no longer hold, even if the next call
+      // fails or times out, so they are withdrawn at once.
+      suggestions.offer(suggestionSources.assist, assist.proposes, []);
       clearTimeout(timers.current.get(key));
       timers.current.set(
         key,
