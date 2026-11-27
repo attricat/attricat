@@ -582,6 +582,95 @@ async fn sample_accounts_hold_their_roles_and_are_published(pool: PgPool) {
 }
 
 #[sqlx::test(migrator = "api::MIGRATOR")]
+async fn client_config_is_public_and_follows_the_deployment(pool: PgPool) {
+    let client = Client::new();
+    let client_config = |base_url: String| {
+        let client = client.clone();
+        async move {
+            client
+                .get(format!("{base_url}/client-config"))
+                .send()
+                .await
+                .unwrap()
+                .json::<Value>()
+                .await
+                .unwrap()
+        }
+    };
+    let (base_url, server) = start_server_with_config(pool.clone(), |_| {}).await;
+    assert_eq!(
+        client_config(base_url).await,
+        json!({ "default_language": null, "sign_in_workspace": null })
+    );
+    server.abort();
+
+    let (base_url, server) = start_server_with_config(pool, |state| {
+        state.client_config = api::http::ClientConfig {
+            default_language: Some(api::http::InterfaceLanguage::Pl),
+            sign_in_workspace: Some("acme.example".to_owned()),
+        };
+    })
+    .await;
+    assert_eq!(
+        client_config(base_url).await,
+        json!({ "default_language": "pl", "sign_in_workspace": "acme.example" })
+    );
+    server.abort();
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn the_configured_identifier_renames_the_bootstrap_workspace(pool: PgPool) {
+    let system = AttricatRepository::system(pool.clone());
+    let workspace_id = bootstrap_workspace_id();
+    // Startup applies it every time, so an unchanged value is not an error.
+    for _ in 0..2 {
+        system
+            .set_bootstrap_login_identifier(workspace_id, "acme.example")
+            .await
+            .unwrap();
+    }
+    let (base_url, server) = start_session_server(pool.clone()).await;
+    let client = Client::new();
+    let discover = |identifier: &'static str| {
+        client
+            .post(format!("{base_url}/auth/discover"))
+            .json(&json!({ "login_identifier": identifier }))
+            .send()
+    };
+    assert_eq!(
+        discover("acme.example").await.unwrap().status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        discover("default.local").await.unwrap().status(),
+        StatusCode::NOT_FOUND
+    );
+    server.abort();
+
+    system
+        .create_operator_workspace(&api::repository::NewOperatorWorkspace {
+            id: Uuid::new_v4(),
+            name: "Other",
+            login_identifier: "other.example",
+            owner_email: "other-owner@example.test",
+        })
+        .await
+        .unwrap();
+    assert!(matches!(
+        system
+            .set_bootstrap_login_identifier(workspace_id, "other.example")
+            .await,
+        Err(api::repository::RepositoryError::LoginIdentifierTaken)
+    ));
+    assert!(matches!(
+        system
+            .set_bootstrap_login_identifier(workspace_id, "Not An Identifier")
+            .await,
+        Err(api::repository::RepositoryError::InvalidLoginIdentifier)
+    ));
+}
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
 async fn demo_mode_refuses_changes_that_could_lock_visitors_out(pool: PgPool) {
     let (base_url, server) = start_server_with_config(pool, |state| state.demo_mode = true).await;
     let anonymous = Client::new();

@@ -210,6 +210,7 @@ pub use notifications::{
 pub use oidc_sign_in::{NewOidcLoginRequest, NewOidcSession, OidcIntent, OidcLoginRequest};
 pub use operator_workspaces::{
     NewOperatorWorkspace, OperatorWorkspace, OwnerInvitation, OwnerInvitationPolicy,
+    is_login_identifier,
 };
 pub use record_comments::{COMMENT_PAGE_SIZE, RecordComment};
 pub use rules::{FindingSelection, MAX_BULK_ACKNOWLEDGE, RuleFindingFilter, RuleRunFilter};

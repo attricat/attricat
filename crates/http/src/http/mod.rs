@@ -4,6 +4,7 @@ mod audit;
 mod audit_events;
 mod auth;
 mod blueprints;
+mod client_config;
 mod conditional;
 mod contexts;
 mod data_health;
@@ -135,6 +136,8 @@ pub struct AppState {
     pub metrics_token: Option<OperatorToken>,
     /// Seeded per-role accounts that the web sign-in offers to pre-fill.
     pub sample_logins: Option<SampleLogins>,
+    /// Public settings the web app loads before it renders.
+    pub client_config: ClientConfig,
     pub build_info: BuildInfo,
     /// Compiled SPA directory served outside `/api`; production images set
     /// it to the Vite output.
@@ -176,6 +179,7 @@ pub struct OidcSettings {
     pub client_ip_header: Option<axum::http::HeaderName>,
     pub starting_metadata: oidc::StartingMetadataCache,
 }
+pub use self::client_config::{ClientConfig, InterfaceLanguage};
 pub use self::sessions::{SampleAccount, SampleLogins};
 pub use self::streams::StreamControl;
 pub use self::system::BuildInfo;
@@ -816,6 +820,7 @@ pub fn router(state: AppState) -> Router {
             get(extension_field_notes::client_source),
         )
         .route("/auth/sample-logins", get(sessions::sample_logins))
+        .route("/client-config", get(client_config::client_config))
         .route("/auth/discover", post(sessions::discover))
         .route("/auth/login", post(sessions::login))
         .route(

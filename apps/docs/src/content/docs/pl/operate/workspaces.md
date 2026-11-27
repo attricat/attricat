@@ -9,7 +9,7 @@ Większość zadań administracyjnych wykonasz w **Zarządzanie → Zarządzanie
 
 ## Logowanie
 
-Każdy obszar roboczy ma **identyfikator logowania**, który wygląda jak nazwa domeny, np. `acme.example` lub `default.local`. Użytkownicy wpisują go na stronie logowania, a potem podają adres e-mail i hasło. Identyfikator służy wyłącznie do kierowania logowania; Attricat nie sprawdza go w DNS.
+Każdy obszar roboczy ma **identyfikator logowania**, który wygląda jak nazwa domeny, np. `acme.example` lub `default.local`. Użytkownicy wpisują go na stronie logowania, a potem podają adres e-mail i hasło. Identyfikator służy wyłącznie do kierowania logowania; Attricat nie sprawdza go w DNS. Wdrożenie dla jednej organizacji może pominąć ten krok, tak aby użytkownicy od razu podawali adres e-mail i hasło; zobacz [Jedna organizacja w jednym wdrożeniu](/pl/operate/deployment/#jedna-organizacja-w-jednym-wdrożeniu).
 
 Sesje trwają osiem godzin, a ich odnawianie przez API lub `acli auth renew` nie przedłuży sesji poza 24 godziny od zalogowania. Pięć nieudanych prób logowania dla tego samego adresu e-mail w ciągu piętnastu minut tymczasowo blokuje kolejne próby we wszystkich obszarach roboczych. **Nie pamiętasz hasła?** wysyła link do resetowania, który działa jednorazowo przez 30 minut. Ze względów bezpieczeństwa formularz resetowania nigdy nie ujawnia, czy dany adres ma konto.
 

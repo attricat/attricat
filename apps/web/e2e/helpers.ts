@@ -7,6 +7,7 @@ import {
 import { parse, stringify } from 'yaml';
 import { httpStatus } from '../src/api/httpStatus.ts';
 import { e2eApiUrl, e2eMailpitUrl } from './ports.ts';
+import { e2eLoginIdentifier } from './workspace-identity.ts';
 
 const fixtureEmail = 'fixture@example.test';
 const fixturePassword = 'e2e-only-fixture-password';
@@ -18,7 +19,7 @@ const signInFixture = async () => {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      login_identifier: 'default.local',
+      login_identifier: e2eLoginIdentifier,
       email: fixtureEmail,
       password: fixturePassword,
     }),
@@ -319,7 +320,7 @@ export const signInAsMember = async (browser: Browser, roleCode: string) => {
   });
   const page = await context.newPage();
   await page.goto('/login');
-  await page.getByLabel('Workspace', { exact: true }).fill('default.local');
+  await page.getByLabel('Workspace', { exact: true }).fill(e2eLoginIdentifier);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Email').fill(member.email);
   await page.getByLabel('Password').fill(member.password);

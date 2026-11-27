@@ -521,6 +521,7 @@ async fn start_configured_server(
         operator_token: None,
         metrics_token: Some(OperatorToken::new(METRICS_TOKEN)),
         sample_logins: None,
+        client_config: Default::default(),
         build_info: BuildInfo {
             version: env!("CARGO_PKG_VERSION"),
             branch: env!("ATTRICAT_BUILD_BRANCH"),

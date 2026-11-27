@@ -7,6 +7,7 @@ import {
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { expect, test } from '@playwright/test';
+import { e2eLoginIdentifier } from './workspace-identity.ts';
 
 const clientId = 'attricat-e2e';
 const clientSecret = 'e2e-client-secret';
@@ -141,7 +142,7 @@ test('sets up single sign-on, signs in with it, and explains a refusal', async (
       storageState: { cookies: [], origins: [] },
     });
     const visitor = await context.newPage();
-    await visitor.goto('/login/default.local');
+    await visitor.goto(`/login/${e2eLoginIdentifier}`);
     await visitor
       .getByRole('button', { name: 'Continue with E2E SSO' })
       .click();
@@ -156,7 +157,7 @@ test('sets up single sign-on, signs in with it, and explains a refusal', async (
       storageState: { cookies: [], origins: [] },
     });
     const strangerPage = await stranger.newPage();
-    await strangerPage.goto('/login/default.local');
+    await strangerPage.goto(`/login/${e2eLoginIdentifier}`);
     await strangerPage
       .getByRole('button', { name: 'Continue with E2E SSO' })
       .click();

@@ -1,13 +1,16 @@
 import { expect, test } from '@playwright/test';
 import { e2eMailpitUrl } from './ports.ts';
+import { e2eLoginIdentifier } from './workspace-identity.ts';
 
 test('signs in and signs out through browser cookies', async ({ page }) => {
   await page.context().clearCookies();
   await page.goto('/');
   await expect(page).toHaveURL(/\/login$/);
-  await page.getByLabel('Workspace', { exact: true }).fill('default.local');
+  await page.getByLabel('Workspace', { exact: true }).fill(e2eLoginIdentifier);
   await page.getByRole('button', { name: 'Continue' }).click();
-  await expect(page).toHaveURL(/\/login\/default\.local$/);
+  await expect(page).toHaveURL(
+    (url) => url.pathname === `/login/${e2eLoginIdentifier}`,
+  );
 
   await page.getByLabel('Email').fill('fixture@example.test');
   await page.getByLabel('Password').fill('e2e-only-fixture-password');
@@ -26,7 +29,7 @@ test('returns to an authenticated deep link after sign in', async ({
   await page.goto('/manage/data-health?staleAfterDays=45#freshness');
   await expect(page).toHaveURL(/\/login$/);
 
-  await page.getByLabel('Workspace', { exact: true }).fill('default.local');
+  await page.getByLabel('Workspace', { exact: true }).fill(e2eLoginIdentifier);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Email').fill('fixture@example.test');
   await page.getByLabel('Password').fill('e2e-only-fixture-password');
@@ -91,7 +94,7 @@ test('resets a password using a Mailpit-delivered one-time link', async ({
 
   await page.context().clearCookies();
   await page.goto('/login');
-  await page.getByLabel('Workspace', { exact: true }).fill('default.local');
+  await page.getByLabel('Workspace', { exact: true }).fill(e2eLoginIdentifier);
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByLabel('Email').fill('reset@example.test');
   await page.getByLabel('Password').fill('new-e2e-reset-password');

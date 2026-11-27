@@ -8,7 +8,8 @@ import { createRoot } from 'react-dom/client';
 import { retryUnlessRefused } from './api/queryRetries';
 import { AppProviders } from './app/AppProviders';
 import { toast } from './components/toast';
-import i18n, { i18nReady } from './i18n';
+import i18n, { applyInstallationLanguage, i18nReady } from './i18n';
+import { clientConfigQueryKey, loadClientConfig } from './app/clientConfig';
 import { router } from './app/router';
 import { authQueryKeys } from './features/auth/queryKeys';
 import { recheckSessionWhenSignedOut } from './features/auth/sessionExpiry';
@@ -53,8 +54,13 @@ declare module '@tanstack/react-router' {
   }
 }
 
-// Do not render untranslated keys while the selected locale chunk loads.
-void i18nReady.then(() => {
+// Do not render untranslated keys while the selected locale chunk loads, or
+// in the browser's language before the installation default replaces it.
+void Promise.all([i18nReady, loadClientConfig()]).then(async ([, config]) => {
+  if (config) {
+    queryClient.setQueryData(clientConfigQueryKey, config);
+    await applyInstallationLanguage(config.default_language);
+  }
   createRoot(document.getElementById('root')!).render(
     <QueryClientProvider client={queryClient}>
       <AppProviders />

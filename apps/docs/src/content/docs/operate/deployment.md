@@ -88,7 +88,22 @@ Leave a file empty to turn its feature off. Single sign-on needs `identity_provi
 
 On first start the API names the bootstrap workspace from `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` and creates an owner account for `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Provide the `bootstrap_owner_password` secret for that first start so the owner can sign in, then empty it. It never changes an existing password.
 
-The owner signs in with the workspace identifier, normally `default.local`, then invites everyone else. To add more workspaces, set the `operator_api_token` secret and use the [operator API](/reference/api/#operator-api).
+The owner signs in with the workspace's sign-in identifier, `default.local` unless you set `ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER`, then invites everyone else. To add more workspaces, set the `operator_api_token` secret and use the [operator API](/reference/api/#operator-api).
+
+### One organization per deployment
+
+Most deployments serve one organization. For those, give the workspace an identifier of your own and skip the workspace step at sign-in:
+
+```sh
+# deploy/.env.production
+ATTRICAT_BOOTSTRAP_WORKSPACE_NAME="Acme"
+ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER=acme.example
+ATTRICAT_SINGLE_WORKSPACE=true
+# Optional: open the app in Polish for everyone who has not picked a language.
+ATTRICAT_DEFAULT_LANGUAGE=pl
+```
+
+Keep `default.local` only for local evaluation. With `ATTRICAT_SINGLE_WORKSPACE`, people open `/login` and go straight to the password and single sign-on step for that workspace. You can change both settings later and restart: a new identifier replaces the old one at sign-in, and turning single-workspace mode off brings the workspace step back.
 
 ## Health checks
 

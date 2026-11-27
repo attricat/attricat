@@ -2,7 +2,11 @@ import { useActiveLanguage } from '../i18n/useActiveLanguage';
 import { FormControl, InputLabel, MenuItem, Select } from '@mui/material';
 import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
-import { type SupportedLanguage, supportedLanguages } from '../i18n';
+import {
+  type SupportedLanguage,
+  chooseLanguage,
+  supportedLanguages,
+} from '../i18n';
 
 const languageSwitcherMinWidth = 120;
 
@@ -12,7 +16,7 @@ const languageLabelKeys = {
 } as const satisfies Record<SupportedLanguage, string>;
 
 export const LanguageSwitcher = () => {
-  const { i18n, t } = useTranslation();
+  const { t } = useTranslation();
   const labelId = useId();
   const language = useActiveLanguage();
 
@@ -22,7 +26,9 @@ export const LanguageSwitcher = () => {
       <Select
         label={t('language.label')}
         labelId={labelId}
-        onChange={(event) => void i18n.changeLanguage(event.target.value)}
+        onChange={(event) =>
+          void chooseLanguage(event.target.value as SupportedLanguage)
+        }
         value={language}
       >
         {supportedLanguages.map((item) => (

@@ -88,7 +88,22 @@ Pozostaw plik pusty, aby wyłączyć daną funkcję. Logowanie jednokrotne wymag
 
 Przy pierwszym uruchomieniu API nadaje startowemu obszarowi roboczemu nazwę z `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` i tworzy konto właściciela dla `ATTRICAT_BOOTSTRAP_OWNER_EMAIL`. Podaj sekret `bootstrap_owner_password` na czas pierwszego uruchomienia, aby właściciel mógł się zalogować, a potem opróżnij jego plik. Nigdy nie zmienia on istniejącego hasła.
 
-Właściciel loguje się identyfikatorem obszaru roboczego, zwykle `default.local`, a następnie zaprasza pozostałe osoby. Aby dodać kolejne obszary robocze, ustaw sekret `operator_api_token` i użyj [API operatora](/pl/reference/api/#api-operatora).
+Właściciel loguje się identyfikatorem logowania obszaru roboczego, czyli `default.local`, jeśli nie ustawisz `ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER`, a następnie zaprasza pozostałe osoby. Aby dodać kolejne obszary robocze, ustaw sekret `operator_api_token` i użyj [API operatora](/pl/reference/api/#api-operatora).
+
+### Jedna organizacja w jednym wdrożeniu
+
+Większość wdrożeń obsługuje jedną organizację. W takim wdrożeniu nadaj obszarowi roboczemu własny identyfikator i pomiń krok wyboru obszaru roboczego przy logowaniu:
+
+```sh
+# deploy/.env.production
+ATTRICAT_BOOTSTRAP_WORKSPACE_NAME="Acme"
+ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER=acme.example
+ATTRICAT_SINGLE_WORKSPACE=true
+# Opcjonalnie: aplikacja otwiera się po polsku dla wszystkich, którzy nie wybrali języka.
+ATTRICAT_DEFAULT_LANGUAGE=pl
+```
+
+Identyfikator `default.local` zostaw tylko do lokalnego wypróbowania. Przy `ATTRICAT_SINGLE_WORKSPACE` użytkownicy otwierają `/login` i od razu przechodzą do kroku hasła i logowania jednokrotnego w tym obszarze roboczym. Oba ustawienia możesz później zmienić i uruchomić serwer ponownie: nowy identyfikator zastępuje stary przy logowaniu, a wyłączenie trybu jednego obszaru roboczego przywraca krok wyboru.
 
 ## Kontrole stanu
 

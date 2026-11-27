@@ -13,7 +13,7 @@ With `WEB_DIST_DIR` set, every other path serves the web app.
 
 ## Authorization
 
-`GET /health`, `GET /health/live`, `GET /health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`,
+`GET /health`, `GET /health/live`, `GET /health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `GET /client-config`, `POST /auth/login`,
 `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, and
 `POST /onboarding/complete` are public. Browser requests authenticate
 with the opaque HttpOnly `attricat_session` cookie created by login; missing,
@@ -124,6 +124,7 @@ password, cookie, CSRF, expiry, and revocation contract is documented in
 | `GET`, `POST` | `/extensions/{extension_id}/annotation-namespace` | Inventory an extension's annotation namespace, or explicitly adopt pre-existing annotations under that name for an installed extension (`extensions.read` / `extensions.manage`). |
 | `POST` | `/extensions/{extension_id}/annotation-namespace/records/{record_id}` | Operator repair or cleanup of one claimed namespace on a record using the extension annotation patch shape (`extensions.manage` and `records.write` on the record). |
 | `POST` | `/auth/discover` | Resolve a normalized workspace identifier and return its sign-in methods; rate-limited and intentionally minimal. |
+| `GET` | `/client-config` | Public settings the web app loads before it renders: `default_language` (`en`, `pl` or `null`, from `ATTRICAT_DEFAULT_LANGUAGE`) and `sign_in_workspace` (the bootstrap sign-in identifier when `ATTRICAT_SINGLE_WORKSPACE` or demo mode is on, otherwise `null`). |
 | `GET` | `/auth/sample-logins` | Return the sample accounts, their shared password and the workspace identifier when `ATTRICAT_SAMPLE_ACCOUNTS` or `ATTRICAT_DEMO_MODE` is on, otherwise `null`. Demo mode also rejects password reset and member, role-grant, ownership, invitation and user-creation changes with `403 disabled_in_demo`. |
 | `POST` | `/auth/login` | Sign in with a previously resolved workspace identifier, email, and password. An optional `invitation_secret` accepts that workspace's invitation in the same step, for someone not yet a member. |
 | `POST` | `/auth/password-reset` | Request a password-reset message for a local account. |

@@ -17,7 +17,7 @@ API routes are served below `/api`, for example `GET https://attricat.example.co
 
 Clients never send a workspace ID; it always comes from the token or session.
 
-Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, where the single-use OAuth state is the credential, `GET /public/extension-files/{token}`, where the token in the link is the credential, and `GET`/`POST /public/extension-webhooks/{token}`, where the token in the URL is the credential and the extension checks the sender.
+Public routes that need no credentials: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `GET /client-config`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, where the single-use OAuth state is the credential, `GET /public/extension-files/{token}`, where the token in the link is the credential, and `GET`/`POST /public/extension-webhooks/{token}`, where the token in the URL is the credential and the extension checks the sender.
 
 ## Conventions
 

@@ -23,6 +23,7 @@ import {
   e2eWebPort,
   e2eWebUrl,
 } from './ports.ts';
+import { e2eLoginIdentifier } from './workspace-identity.ts';
 
 const workspaceRoot = new URL('../../..', import.meta.url).pathname;
 const bootstrapOwnerId = '00000000-0000-4000-8000-000000000201';
@@ -305,6 +306,7 @@ export default async () => {
     S3_DOWNLOAD_TIMEOUT_SECONDS: '120',
     ATTRICAT_BOOTSTRAP_OWNER_ID: bootstrapOwnerId,
     ATTRICAT_BOOTSTRAP_OWNER_EMAIL: bootstrapOwnerEmail,
+    ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER: e2eLoginIdentifier,
     // Specs assume the bootstrap owner is the only seeded member.
     ATTRICAT_SAMPLE_ACCOUNTS: 'false',
     ATTRICAT_DEMO_MODE: 'false',
@@ -353,9 +355,11 @@ export default async () => {
     const context = await browser.newContext();
     const page = await context.newPage();
     await page.goto(`${e2eWebUrl}/login`);
-    await page.getByLabel('Workspace', { exact: true }).fill('default.local');
+    await page
+      .getByLabel('Workspace', { exact: true })
+      .fill(e2eLoginIdentifier);
     await page.getByRole('button', { name: 'Continue' }).click();
-    await page.waitForURL(`${e2eWebUrl}/login/default.local`);
+    await page.waitForURL(`${e2eWebUrl}/login/${e2eLoginIdentifier}`);
     await page.getByLabel('Email').fill(bootstrapOwnerEmail);
     await page.getByLabel('Password').fill(bootstrapOwnerPassword);
     await page.getByRole('button', { name: 'Sign in' }).click();

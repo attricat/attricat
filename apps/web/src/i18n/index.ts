@@ -40,12 +40,43 @@ export const i18nReady = i18n
     interpolation: { escapeValue: false },
     // Re-render when the workspace lexicon (re)loads, not only on language change.
     react: { bindI18n: 'languageChanged loaded' },
+    // Only a language the person picks is stored, so the installation
+    // default still applies to everyone who has not picked one.
     detection: {
-      caches: ['localStorage'],
+      caches: [],
       lookupLocalStorage: languageStorageKey,
       order: ['localStorage', 'navigator'],
     },
   });
+
+const storedLanguage = () => {
+  try {
+    return localStorage.getItem(languageStorageKey);
+  } catch {
+    return null;
+  }
+};
+
+/** Shows the app in the person's pick and remembers it in this browser. */
+export const chooseLanguage = async (language: SupportedLanguage) => {
+  try {
+    localStorage.setItem(languageStorageKey, language);
+  } catch {
+    // Without storage the pick lasts until the page reloads.
+  }
+  await i18n.changeLanguage(language);
+};
+
+/**
+ * Applies the installation's default language over the browser's, unless
+ * the person picked one in this browser.
+ */
+export const applyInstallationLanguage = async (
+  language: SupportedLanguage | null,
+) => {
+  if (!language || storedLanguage()) return;
+  await i18n.changeLanguage(language);
+};
 
 /** The supported language the app is shown in, falling back to the default. */
 export const activeLanguage = (

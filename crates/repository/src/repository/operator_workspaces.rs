@@ -69,7 +69,7 @@ pub enum OwnerInvitationPolicy {
 
 /// Mirrors the `workspaces_login_identifier_format_check` constraint, so a bad
 /// value gets its own error instead of a constraint failure.
-fn is_login_identifier(value: &str) -> bool {
+pub fn is_login_identifier(value: &str) -> bool {
     if !LOGIN_IDENTIFIER_BYTES.contains(&value.len()) {
         return false;
     }

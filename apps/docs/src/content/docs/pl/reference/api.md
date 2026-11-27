@@ -17,7 +17,7 @@ Trasy API są dostępne pod `/api`, np. `GET https://attricat.example.com/api/bl
 
 Klienci nigdy nie wysyłają identyfikatora obszaru roboczego; zawsze pochodzi on z tokenu lub sesji.
 
-Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, gdzie danymi uwierzytelniającymi jest jednorazowy stan OAuth, `GET /public/extension-files/{token}`, gdzie danymi uwierzytelniającymi jest token z linku, oraz `GET`/`POST /public/extension-webhooks/{token}`, gdzie danymi uwierzytelniającymi jest token w adresie URL, a nadawcę sprawdza rozszerzenie.
+Trasy publiczne, które nie wymagają danych uwierzytelniających: `/health`, `/health/live`, `/health/ready`, `POST /auth/discover`, `GET /auth/sample-logins`, `GET /client-config`, `POST /auth/login`, `POST /auth/password-reset`, `POST /auth/password-reset/confirm`, `POST /onboarding/complete`, `POST /auth/oidc/start`, `POST /auth/oidc/invitation`, `GET /auth/oidc/callback/{workspace_id}`, `GET /public/extension-oauth/callback`, gdzie danymi uwierzytelniającymi jest jednorazowy stan OAuth, `GET /public/extension-files/{token}`, gdzie danymi uwierzytelniającymi jest token z linku, oraz `GET`/`POST /public/extension-webhooks/{token}`, gdzie danymi uwierzytelniającymi jest token w adresie URL, a nadawcę sprawdza rozszerzenie.
 
 ## Konwencje
 

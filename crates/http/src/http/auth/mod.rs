@@ -378,6 +378,7 @@ fn is_public_route(path: &str) -> bool {
             | "/auth/oidc/start"
             | "/auth/oidc/invitation"
             | "/auth/sample-logins"
+            | "/client-config"
             | "/auth/password-reset"
             | "/auth/password-reset/confirm"
             | "/onboarding/complete"
@@ -482,6 +483,7 @@ mod route_tests {
             "/auth/login",
             "/auth/discover",
             "/auth/sample-logins",
+            "/client-config",
             "/onboarding/complete",
             "/public/extension-oauth/callback",
             "/public/extension-webhooks/{token}",

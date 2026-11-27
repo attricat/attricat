@@ -36,7 +36,9 @@ use crate::{
     extension_policy::ExtensionPolicy,
     extension_registry::{DEFAULT_OFFICIAL_REGISTRY, GitHubRepository},
     file_worker::WorkerConfig,
+    http::InterfaceLanguage,
     maintenance::RetentionConfig,
+    repository::is_login_identifier,
     storage::StorageConfig,
     task_worker::TaskWorkerConfig,
 };
@@ -54,6 +56,9 @@ const DEFAULT_FILE_WORKER_CONCURRENCY: usize = 4;
 pub const MAX_FILE_WORKER_CONCURRENCY: usize = 32;
 const DEFAULT_WORKSPACE_ID: Uuid = Uuid::from_u128(0x00000000_0000_4000_8000_000000000002);
 const DEFAULT_BOOTSTRAP_OWNER_EMAIL: &str = "owner@example.test";
+const DEFAULT_BOOTSTRAP_LOGIN_IDENTIFIER: &str = "default.local";
+/// Sign-in identifier of the bootstrap workspace in `ATTRICAT_DEMO_MODE`.
+const DEMO_LOGIN_IDENTIFIER: &str = "demo.attricat.com";
 // Local development defaults: a mail catcher and the Vite dev server.
 const DEFAULT_SMTP_HOST: &str = "127.0.0.1";
 const DEFAULT_SMTP_PORT: u16 = 1025;
@@ -171,6 +176,8 @@ pub struct OidcConfig {
 pub struct HttpConfig {
     pub bind_addr: SocketAddr,
     pub web_dist_dir: Option<String>,
+    /// `None` leaves the web app's language to the browser.
+    pub default_language: Option<InterfaceLanguage>,
     pub session_cookie_secure: bool,
     pub devtools_enabled: bool,
     pub operator_api_token: Option<SecretString>,
@@ -196,6 +203,11 @@ pub struct HttpConfig {
 pub struct BootstrapConfig {
     pub workspace_id: Uuid,
     pub workspace_name: String,
+    /// Sign-in identifier, applied at every start. Trimmed and lowercased.
+    pub login_identifier: String,
+    /// The web sign-in skips the workspace step and opens this workspace.
+    /// Implied by `demo_mode`.
+    pub single_workspace: bool,
     /// Trimmed and lowercased.
     pub owner_email: String,
     pub owner_id: Option<Uuid>,
@@ -374,6 +386,7 @@ impl Config {
             http: HttpConfig {
                 bind_addr: source.parsed("BIND_ADDR", DEFAULT_BIND_ADDR)?,
                 web_dist_dir: source.owned("WEB_DIST_DIR"),
+                default_language: default_language(source)?,
                 session_cookie_secure: source.boolean("SESSION_COOKIE_SECURE", true)?,
                 devtools_enabled,
                 operator_api_token: operator_api_token(source)?,
@@ -509,6 +522,25 @@ impl Config {
     }
 }
 
+fn default_language(source: &Source) -> Result<Option<InterfaceLanguage>, ConfigError> {
+    source
+        .var("ATTRICAT_DEFAULT_LANGUAGE")
+        .map(|value| {
+            value.trim().to_lowercase().parse().map_err(|()| {
+                let codes: Vec<_> = InterfaceLanguage::ALL
+                    .iter()
+                    .map(|language| language.as_str())
+                    .collect();
+                format!(
+                    "ATTRICAT_DEFAULT_LANGUAGE must be one of {}",
+                    codes.join(", ")
+                )
+                .into()
+            })
+        })
+        .transpose()
+}
+
 fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, ConfigError> {
     // A blank address is a mistake, not a request for the test default.
     let owner_email = source
@@ -538,6 +570,21 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
             email: email.trim().to_lowercase(),
             password,
         });
+    let login_identifier = source
+        .var("ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER")
+        .unwrap_or(if demo_mode {
+            DEMO_LOGIN_IDENTIFIER
+        } else {
+            DEFAULT_BOOTSTRAP_LOGIN_IDENTIFIER
+        })
+        .trim()
+        .to_lowercase();
+    if !is_login_identifier(&login_identifier) {
+        return Err(
+            "ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER must look like a domain name, such as acme.example"
+                .into(),
+        );
+    }
     Ok(BootstrapConfig {
         workspace_id: source.parsed("ATTRICAT_WORKSPACE_ID", DEFAULT_WORKSPACE_ID)?,
         workspace_name: source
@@ -550,6 +597,8 @@ fn bootstrap(source: &Source, demo_mode: bool) -> Result<BootstrapConfig, Config
                 }
                 .to_owned()
             }),
+        login_identifier,
+        single_workspace: demo_mode || source.boolean("ATTRICAT_SINGLE_WORKSPACE", false)?,
         owner_email,
         owner_id: source
             .var("ATTRICAT_BOOTSTRAP_OWNER_ID")
@@ -1085,12 +1134,69 @@ mod tests {
         assert!(config.agent_provider.unwrap().read_only);
         assert!(config.bootstrap.sample_accounts);
         assert_eq!(config.bootstrap.workspace_name, "Demo");
+        assert_eq!(config.bootstrap.login_identifier, DEMO_LOGIN_IDENTIFIER);
+        assert!(config.bootstrap.single_workspace);
         assert_eq!(
             config.bootstrap.owner_password.unwrap().expose_secret(),
             "owner password"
         );
         // An empty file is an unset secret.
         assert!(config.mail.smtp_password.is_none());
+    }
+
+    #[test]
+    fn bootstrap_sign_in_identifier_and_single_workspace_are_configurable() {
+        let secrets = required_secrets();
+        let config = load(&secrets, &[]).unwrap();
+        assert_eq!(
+            config.bootstrap.login_identifier,
+            DEFAULT_BOOTSTRAP_LOGIN_IDENTIFIER
+        );
+        assert!(!config.bootstrap.single_workspace);
+        let config = load(
+            &secrets,
+            &[
+                ("ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER", " Acme.Example "),
+                ("ATTRICAT_SINGLE_WORKSPACE", "true"),
+            ],
+        )
+        .unwrap();
+        assert_eq!(config.bootstrap.login_identifier, "acme.example");
+        assert!(config.bootstrap.single_workspace);
+        // An empty template entry keeps the default.
+        let config = load(&secrets, &[("ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER", "")]).unwrap();
+        assert_eq!(
+            config.bootstrap.login_identifier,
+            DEFAULT_BOOTSTRAP_LOGIN_IDENTIFIER
+        );
+        for invalid in ["localhost", "acme_corp.example", "-acme.example"] {
+            assert!(
+                load(
+                    &secrets,
+                    &[("ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER", invalid)]
+                )
+                .is_err(),
+                "{invalid}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_default_language_is_optional_but_must_be_translated() {
+        let secrets = required_secrets();
+        assert_eq!(load(&secrets, &[]).unwrap().http.default_language, None);
+        assert_eq!(
+            load(&secrets, &[("ATTRICAT_DEFAULT_LANGUAGE", " PL ")])
+                .unwrap()
+                .http
+                .default_language,
+            Some(InterfaceLanguage::Pl)
+        );
+        let error = load(&secrets, &[("ATTRICAT_DEFAULT_LANGUAGE", "de")])
+            .err()
+            .unwrap()
+            .to_string();
+        assert!(error.contains("en, pl"), "{error}");
     }
 
     #[test]

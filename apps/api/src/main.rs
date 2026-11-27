@@ -12,12 +12,12 @@ use api::{
     extension_runtime::{self, ComponentCompiler, ExtensionRuntime, ExtensionRuntimeConfig},
     file_access::AllowFileAccess,
     http::{
-        AppState, BuildInfo, OidcSettings, OperatorToken, SampleAccount, SampleLogins,
-        StreamControl, router,
+        AppState, BuildInfo, ClientConfig, OidcSettings, OperatorToken, SampleAccount,
+        SampleLogins, StreamControl, router,
     },
     mail::SmtpMailDelivery,
     maintenance, migration_connect_options,
-    repository::{AttricatRepository, SystemRepository},
+    repository::{AttricatRepository, RepositoryError, SystemRepository},
     rule_runtime,
     runtime::{clear_stale_temp_files, ready_object_store, shutdown_signal},
     solution_pack_extensions::{
@@ -92,6 +92,8 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let BootstrapConfig {
         workspace_id,
         workspace_name: bootstrap_workspace_name,
+        login_identifier: bootstrap_login_identifier,
+        single_workspace,
         owner_email: bootstrap_owner_email,
         owner_id: bootstrap_owner_id,
         owner_password: bootstrap_owner_password,
@@ -139,11 +141,16 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             &bootstrap_owner_email,
         )
         .await?;
-    if demo_mode {
-        bootstrap_repository
-            .set_bootstrap_login_identifier(workspace_id, DEMO_LOGIN_IDENTIFIER)
-            .await?;
-    }
+    bootstrap_repository
+        .set_bootstrap_login_identifier(workspace_id, &bootstrap_login_identifier)
+        .await
+        .map_err(|error| match error {
+            RepositoryError::LoginIdentifierTaken => format!(
+                "ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER {bootstrap_login_identifier} is already used by another workspace"
+            )
+            .into(),
+            error => Box::<dyn std::error::Error + Send + Sync>::from(error),
+        })?;
     // The migration defines the identity/RBAC schema, but configuration is
     // available only after migrations. Bootstrap the configured owner here so
     // a fresh installation receives its initial durable owner grant.
@@ -467,6 +474,10 @@ async fn serve() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 .as_ref()
                 .map(|token| OperatorToken::new(token.expose_secret())),
             sample_logins,
+            client_config: ClientConfig {
+                default_language: http.default_language,
+                sign_in_workspace: single_workspace.then(|| bootstrap_login_identifier.clone()),
+            },
             build_info: BuildInfo {
                 version: env!("CARGO_PKG_VERSION"),
                 branch: env!("ATTRICAT_BUILD_BRANCH"),
@@ -547,8 +558,6 @@ fn supervise<T: Send + 'static>(
 /// How long past the longest request's timeout shutdown waits for connections.
 const SHUTDOWN_DRAIN_MARGIN: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// Sign-in identifier of the bootstrap workspace in `ATTRICAT_DEMO_MODE`.
-const DEMO_LOGIN_IDENTIFIER: &str = "demo.attricat.com";
 /// Built-in roles that receive a seeded account beside the bootstrap owner,
 /// from least to most privileged.
 const SAMPLE_ACCOUNT_ROLES: [&str; 3] = ["viewer", "editor", "admin"];

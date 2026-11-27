@@ -9,6 +9,7 @@ import {
   login,
   startSingleSignOn,
 } from './api';
+import { clientConfigQueryKey } from '../../app/clientConfig';
 import { PasswordLoginPage, WorkspaceLoginPage } from './LoginPage';
 import { authQueryKeys } from './queryKeys';
 
@@ -48,7 +49,17 @@ const sampleLogins = (demo: boolean) => ({
   ],
 });
 
-const renderWithClient = (ui: React.ReactNode, client = new QueryClient()) =>
+/** A client holding the config the app loads before it renders. */
+const clientWithConfig = (signInWorkspace: string | null = null) => {
+  const client = new QueryClient();
+  client.setQueryData(clientConfigQueryKey, {
+    default_language: null,
+    sign_in_workspace: signInWorkspace,
+  });
+  return client;
+};
+
+const renderWithClient = (ui: React.ReactNode, client = clientWithConfig()) =>
   render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 
 const submitTwice = async (name: string) => {
@@ -133,7 +144,7 @@ describe('login forms', () => {
       workspace_id: 'workspace-b',
     } as Awaited<ReturnType<typeof login>>;
     vi.mocked(login).mockResolvedValue(session);
-    const client = new QueryClient();
+    const client = clientWithConfig();
     client.setQueryData(['protected'], 'previous account');
     render(
       <QueryClientProvider client={client}>
@@ -168,9 +179,8 @@ describe('login forms', () => {
 
   it('submits only one password login to avoid rotating the session twice', async () => {
     vi.mocked(login).mockImplementation(() => new Promise(() => {}));
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
+    const client = clientWithConfig();
+    client.setDefaultOptions({ queries: { retry: false } });
     render(
       <QueryClientProvider client={client}>
         <PasswordLoginPage identifier="default.local" />
@@ -191,10 +201,29 @@ describe('login forms', () => {
     ).toBe(true);
   });
 
-  it('sends demo deployments straight to the demo workspace', async () => {
-    vi.mocked(fetchSampleLogins).mockResolvedValue(sampleLogins(true));
-    renderWithClient(<WorkspaceLoginPage />);
-    expect(await screen.findByText('navigate:demo.attricat.com')).toBeTruthy();
+  it('sends single-workspace deployments straight to their workspace', async () => {
+    renderWithClient(<WorkspaceLoginPage />, clientWithConfig('acme.example'));
+    expect(await screen.findByText('navigate:acme.example')).toBeTruthy();
+  });
+
+  it('offers no other workspace on the only one', async () => {
+    vi.mocked(discoverWorkspace).mockResolvedValue(discovered());
+    renderWithClient(
+      <PasswordLoginPage identifier="acme.example" />,
+      clientWithConfig('acme.example'),
+    );
+    expect(await screen.findByLabelText('Password')).toBeTruthy();
+    expect(screen.queryByText('Change workspace')).toBeNull();
+    expect(screen.getByText('Forgot password?')).toBeTruthy();
+  });
+
+  it('lets people choose when the lookup fails', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    renderWithClient(<WorkspaceLoginPage />, new QueryClient());
+    expect(
+      await screen.findByRole('textbox', { name: 'Workspace' }),
+    ).toBeTruthy();
+    vi.unstubAllGlobals();
   });
 
   it('signs demo visitors in as the editor and switches accounts', async () => {

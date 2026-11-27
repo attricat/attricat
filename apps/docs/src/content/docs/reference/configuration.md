@@ -70,6 +70,7 @@ The file worker reads the same configuration and also needs the `file_worker_met
 | `ATTRICAT_SECRETS_DIR` | `/run/secrets` | Directory holding the [secret files](#secrets). |
 | `RUST_LOG` | `info` | Log filter, for example `api=debug`. |
 | `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Unset | OTLP/gRPC endpoint for trace export from the API and file worker. Leave unset to disable tracing export. |
+| `ATTRICAT_DEFAULT_LANGUAGE` | Unset | Language the web app opens in: `en` or `pl`. It applies to everyone who has not picked a language with the language switcher in that browser, and replaces the browser's own language. Unset, the app follows the browser's language and falls back to English. Email is always in English. |
 | `ATTRICAT_DEVTOOLS` | `false` | Enables the web Inspector and the Explorer's SQL timing entries in the `Server-Timing` header. The local development `.env` sets it to `true`; keep it `false` in production. In other builds, including production, a browser can load the Inspector on demand by setting local storage `attricat.inspector-enabled` to `true` and reloading; SQL timings still require this setting on the API. SQL text and bind values are never exposed. |
 
 ## Bootstrap workspace and owner
@@ -80,12 +81,14 @@ On startup the API makes sure one workspace and its owner exist. These values ar
 | --- | --- | --- |
 | `ATTRICAT_WORKSPACE_ID` | `00000000-0000-4000-8000-000000000002` | UUID of the workspace created at startup. It does not select a workspace for HTTP requests; the signed-in session or token does that. |
 | `ATTRICAT_BOOTSTRAP_WORKSPACE_NAME` | `Default workspace` | Display name used when the workspace is first created. |
+| `ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER` | `default.local`; `demo.attricat.com` in demo mode | Sign-in identifier of the bootstrap workspace, such as `acme.example`. It must look like a domain name and is trimmed and lowercased. Startup applies it every time, so changing it renames the workspace's identifier at the next start; people then sign in with the new one, and existing sessions and API tokens keep working. Startup fails if another workspace already uses it. |
+| `ATTRICAT_SINGLE_WORKSPACE` | `false`; `true` in demo mode | The deployment serves only the bootstrap workspace, so the sign-in page skips the workspace step, opens that workspace directly and offers no **Change workspace** link. Turning it off brings the workspace step back; nothing else changes. It does not stop the operator API from creating more workspaces: people can still reach those at `/login/<identifier>`, but the sign-in page no longer offers them. |
 | `ATTRICAT_BOOTSTRAP_OWNER_EMAIL` | `owner@example.test` | Email of the initial owner. It is trimmed and lowercased. Startup creates the user, membership, and owner grant if they do not exist. Always set a real address in a deployment. |
 | `ATTRICAT_BOOTSTRAP_OWNER_ID` | Random UUID | Optional fixed UUID for the bootstrap owner. Its first password is the `bootstrap_owner_password` [secret](#secrets). |
 | `ATTRICAT_DEMO_MODE` | `false` | For public demo deployments only. Turns on `ATTRICAT_SAMPLE_ACCOUNTS`, gives the initial workspace the sign-in identifier `demo.attricat.com` and the default name `Demo`, and opens the sign-in page on that workspace with the editor account selected. Visitors can switch to the viewer, admin or owner account. Password reset, member and role-grant changes, ownership transfer, invitations and new users are turned off so visitors cannot lock the shared accounts out. Single sign-on, identity provider changes, installing or upgrading extensions, adding extension registries, and applying solution packs that install extensions are refused too. It requires the `bootstrap_owner_password` secret. If agents are configured, they can read the catalog and explain changes but cannot make them. Never enable it for a workspace with real data. |
 | `ATTRICAT_SAMPLE_ACCOUNTS` | `false` | Creates `viewer@`, `editor@` and `admin@` accounts on the owner's email domain, each with that built-in role and the `bootstrap_owner_password` secret as its password (which must then stay set). The sign-in page offers them in a picker. Anyone who can reach the server can sign in with them, so use it only for local development and demos. |
 
-The bootstrap workspace's sign-in identifier is `default.local`.
+For a deployment that serves one organization, set `ATTRICAT_BOOTSTRAP_LOGIN_IDENTIFIER` to an identifier of your own instead of `default.local`, and turn on `ATTRICAT_SINGLE_WORKSPACE`. See [Deployment](/operate/deployment/#one-organization-per-deployment).
 
 ## Sessions and security
 

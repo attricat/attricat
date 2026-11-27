@@ -26,6 +26,7 @@ import { authQueryKeys } from './queryKeys';
 import { takeReturnLocation } from './returnLocation';
 import { SingleSignOnButton } from './SingleSignOnButton';
 import { RouterButton } from '../../components/RouterLink';
+import { useClientConfig } from '../../app/clientConfig';
 
 const devLoginDefaults = import.meta.env.DEV
   ? {
@@ -46,6 +47,13 @@ const useSampleLogins = () => {
   return { samples: query.data ?? null, pending: query.isPending };
 };
 
+/** The identifier of the deployment's only workspace, or `null` when people
+ * choose one. A failed lookup falls back to choosing. */
+const useSignInWorkspace = () => {
+  const { config, pending } = useClientConfig();
+  return { identifier: config?.sign_in_workspace ?? null, pending };
+};
+
 /** Demo visitors start as an editor, with owner and admin one pick away;
  * development starts as the owner. */
 const defaultSampleRole = (samples: SampleLogins) =>
@@ -53,12 +61,13 @@ const defaultSampleRole = (samples: SampleLogins) =>
 
 export const WorkspaceLoginPage = () => {
   const { samples, pending } = useSampleLogins();
-  if (pending) return null;
-  // Demo deployments have one workspace, so sign-in starts at its password step.
-  if (samples?.demo)
+  const single = useSignInWorkspace();
+  if (pending || single.pending) return null;
+  // Single-workspace deployments, demos included, start at the password step.
+  if (single.identifier)
     return (
       <Navigate
-        params={{ identifier: samples.login_identifier }}
+        params={{ identifier: single.identifier }}
         replace
         to="/login/$identifier"
       />
@@ -123,11 +132,13 @@ const WorkspaceLoginForm = ({
 
 export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
   const { samples, pending } = useSampleLogins();
-  if (pending) return null;
+  const single = useSignInWorkspace();
+  if (pending || single.pending) return null;
   return (
     <PasswordLoginForm
       identifier={identifier}
       samples={samples?.login_identifier === identifier ? samples : null}
+      singleWorkspace={single.identifier === identifier}
     />
   );
 };
@@ -135,9 +146,12 @@ export const PasswordLoginPage = ({ identifier }: { identifier: string }) => {
 const PasswordLoginForm = ({
   identifier,
   samples,
+  singleWorkspace,
 }: {
   identifier: string;
   samples: SampleLogins | null;
+  /** The deployment's only workspace, so there is no other to change to. */
+  singleWorkspace: boolean;
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -188,9 +202,11 @@ const PasswordLoginForm = ({
           {t('auth.demoNotice')}
         </Alert>
       ) : (
-        <RouterButton to="/login" variant="text">
-          {t('auth.changeWorkspace')}
-        </RouterButton>
+        !singleWorkspace && (
+          <RouterButton to="/login" variant="text">
+            {t('auth.changeWorkspace')}
+          </RouterButton>
+        )
       )}
       {provider && (
         <>

@@ -31,21 +31,30 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
         Ok(())
     }
 
-    /// Assigns the deployment-selected sign-in identifier to the bootstrap
-    /// workspace. Only demo deployments use this; identifiers are otherwise
-    /// fixed at provisioning.
+    /// Assigns the deployment-configured sign-in identifier to the bootstrap
+    /// workspace at every start, so changing the setting renames it. Other
+    /// workspaces keep the identifier they were provisioned with.
     pub async fn set_bootstrap_login_identifier(
         &self,
         workspace_id: Uuid,
         login_identifier: &str,
     ) -> Result<(), RepositoryError> {
+        if !super::is_login_identifier(login_identifier) {
+            return Err(RepositoryError::InvalidLoginIdentifier);
+        }
         let updated = sqlx::query(
             "UPDATE workspaces SET login_identifier = $2, updated_at = now() WHERE id = $1 AND deleted_at IS NULL",
         )
         .bind(workspace_id)
         .bind(login_identifier)
         .execute(&self.pool)
-        .await?;
+        .await
+        .map_err(|error| match error {
+            sqlx::Error::Database(database) if database.is_unique_violation() => {
+                RepositoryError::LoginIdentifierTaken
+            }
+            error => error.into(),
+        })?;
         if updated.rows_affected() != 1 {
             return Err(RepositoryError::BootstrapWorkspaceNotActive);
         }
