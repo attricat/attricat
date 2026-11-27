@@ -8,7 +8,7 @@ import { recordPublicationOptions } from '../records/queryOptions';
 import { contextDisplayLabel, displayLabel } from '../records/recordDisplay';
 import { recordPanelOpenerAttribute } from './constants';
 import { compactIconSize } from '../../components/iconSizes';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 import { publicationStatuses } from '../records/constants';
 import { SystemTagChips } from '../records/components/SystemTagChips';
 import { visibleSystemTags } from '../records/systemTags';
@@ -86,7 +86,7 @@ export const PublicationStatusCell = ({
     select: (publications) =>
       publications.find((item) => item.context_id === contextId),
   });
-  if (!contextId || !publication) return emptyValuePlaceholder;
+  if (!contextId || !publication) return <EmptyValue />;
   return (
     <Chip
       color={
@@ -132,7 +132,7 @@ export const SystemTagsCell = ({
       tags={record.system_tags}
     />
   ) : (
-    emptyValuePlaceholder
+    <EmptyValue />
   );
 };
 

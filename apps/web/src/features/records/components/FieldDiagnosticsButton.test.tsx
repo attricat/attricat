@@ -221,7 +221,7 @@ describe('FieldDiagnosticsButton', () => {
               attributeCodes: ['sale_status', 'main_photo', 'description'],
               sources: ['sale_status'],
               name: 'Sale status',
-              detail: 'In preparation → Available',
+              transition: { from: 'In preparation', to: 'Available' },
             },
           ],
           contextCode: 'default',

@@ -35,7 +35,7 @@ import {
 } from '../viewFieldComponents';
 import { AttributeValue } from './values/AttributeValue';
 import { cellEditorSx, rowActionsCellSx } from './cellEditorSx';
-import { NotSetValue } from './values/NotSetValue';
+import { EmptyValue } from '../../../components/EmptyValue';
 
 /** Lines are kept in the default context, which has no parent contexts. */
 const noParentContexts: readonly string[] = [];
@@ -131,7 +131,7 @@ export const IncomingEditableRow = ({
     if (!attribute || !changeableCodes.has(attribute.code)) {
       const value = resolvedValues[column.code]?.value;
       return value === undefined || value === null ? (
-        <NotSetValue />
+        <EmptyValue />
       ) : (
         <AttributeValue attribute={column} recordId={rowId} value={value} />
       );

@@ -6,6 +6,7 @@ import { CompactFieldsContext } from '../../../records/components/compactFields'
 import type { Attribute } from '../../../records/api';
 import { fileDownloadUrl } from '../../../files/api';
 import { ImageGallery } from '../../../files/ImageGallery';
+import { EmptyValue } from '../../../../components/EmptyValue';
 import { JsonBlock, JsonInline } from '../../../../components/JsonValue';
 import { NewTabIcon } from '../../../../components/NewTabIcon';
 import { AttributeValueText } from './AttributeValueText';
@@ -76,9 +77,11 @@ export const AttributeValue = ({
     if (compact)
       return (
         <Typography variant="body2">
-          {items.length
-            ? t('views.linked', { count: items.length })
-            : t('views.notSet')}
+          {items.length ? (
+            t('views.linked', { count: items.length })
+          ) : (
+            <EmptyValue />
+          )}
         </Typography>
       );
     const links = (
@@ -107,9 +110,7 @@ export const AttributeValue = ({
         {value.truncated && (
           <Chip label={t('views.moreLinkedRecords')} variant="outlined" />
         )}
-        {!items.length && (
-          <Typography color="text.secondary">{t('views.notSet')}</Typography>
-        )}
+        {!items.length && <EmptyValue />}
         {preview && linkedRecord && (
           <RelatedRecordPreviewToggle
             label={linkedRecord.display ?? linkedRecord.id}
@@ -131,11 +132,8 @@ export const AttributeValue = ({
     );
   }
   if (attribute.value_type === attributeValueTypes.file) {
-    if (!isFileValue(value)) {
-      return (
-        <Typography variant="body2">{t('views.fileValueNotSet')}</Typography>
-      );
-    }
+    if (!isFileValue(value) || value.length === 0)
+      return <EmptyValue label={t('views.noFiles')} />;
 
     if (compact) {
       return (

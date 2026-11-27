@@ -17,7 +17,7 @@ import { migrationBatchStatuses, migrationProgressMinWidth } from './constants';
 import { Timestamp } from '../../time/Timestamp';
 import type { BlueprintMigrationBatchStatus as MigrationBatch } from './schemas';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 import { monoFontFamily } from '../../app/theme';
 import { LoadingState } from '../../components/LoadingState';
 import { EmptyState } from '../../components/EmptyState';
@@ -51,7 +51,7 @@ const removalPolicyLabel = (
   const codes = policy?.attribute_codes;
   return Array.isArray(codes) && codes.every((code) => typeof code === 'string')
     ? codes.join(', ')
-    : emptyValuePlaceholder;
+    : undefined;
 };
 
 export const MigrationBatchStatus = ({
@@ -153,7 +153,7 @@ export const MigrationBatchStatus = ({
                   <TableCell>{batch.migrated_records}</TableCell>
                   <TableCell>{batch.needs_input_records}</TableCell>
                   <TableCell>
-                    {removalPolicyLabel(batch.removal_policy)}
+                    {removalPolicyLabel(batch.removal_policy) ?? <EmptyValue />}
                   </TableCell>
                   <TableCell>{batch.failed_records}</TableCell>
                   <TableCell>

@@ -29,7 +29,7 @@ import type {
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { formatPushError } from './pushErrors';
-import { emptyValuePlaceholder } from '../../components/placeholders';
+import { EmptyValue } from '../../components/EmptyValue';
 import { useRetryExports } from './useRetryExports';
 import { RetryResultAlerts } from './RetryResultAlerts';
 import { LoadingState } from '../../components/LoadingState';
@@ -188,13 +188,13 @@ export const RecordExportStatusPanel = ({ recordId }: { recordId: string }) => {
                   </Stack>
                 </TableCell>
                 <TableCell sx={{ overflowWrap: 'anywhere' }}>
-                  {mapping?.external_id ?? emptyValuePlaceholder}
+                  {mapping?.external_id ?? <EmptyValue />}
                 </TableCell>
                 <TableCell>
                   {mapping?.synced_at ? (
                     <Timestamp value={mapping.synced_at} />
                   ) : (
-                    emptyValuePlaceholder
+                    <EmptyValue />
                   )}
                 </TableCell>
                 <TableCell align="right">

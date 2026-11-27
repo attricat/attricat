@@ -13,7 +13,6 @@ import {
   recordSchemaChecksKeyword,
   relationshipPredicateTypes,
 } from './constants';
-import { emptyValuePlaceholder } from '../../components/placeholders';
 
 /** How a blueprint ties an attribute to others. */
 export const attributeConnectionKinds = {
@@ -43,8 +42,10 @@ export type AttributeConnection = {
   name?: string;
   /** The mixin version an included attribute comes from. */
   version?: number;
-  /** Status options, a transition, or the mixin attribute selected. */
+  /** Status options or the mixin attribute selected. */
   detail?: string;
+  /** A transition's status labels; a missing side is no status. */
+  transition?: { from?: string; to?: string };
 };
 
 type JsonObject = Record<string, unknown>;
@@ -231,7 +232,7 @@ const statusConnections = (
           attributeCodes: [status.code, ...codes],
           sources: [status.code],
           name,
-          detail: `${from ?? emptyValuePlaceholder} → ${to ?? emptyValuePlaceholder}`,
+          transition: { from, to },
         },
       ];
     });

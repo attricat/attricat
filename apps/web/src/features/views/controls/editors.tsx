@@ -10,7 +10,6 @@ import {
   Stack,
   TextField,
   Tooltip,
-  Typography,
 } from '@mui/material';
 import { useId, useRef, useState, type ChangeEvent } from 'react';
 import { focusRing, monoFontFamily } from '../../../app/theme';
@@ -46,6 +45,7 @@ import {
 } from 'lucide-react';
 import { compactIconSize, smallIconSize } from '../../../components/iconSizes';
 import { FieldHint } from '../../../components/FieldHint';
+import { EmptyValue } from '../../../components/EmptyValue';
 
 export const ColorEditor = ({
   attribute,
@@ -135,9 +135,7 @@ export const ColorEditor = ({
         {value ? (
           <CopyableText value={value} sx={{ fontFamily: monoFontFamily }} />
         ) : (
-          <Typography color="text.secondary" variant="body2">
-            {t('views.notSet')}
-          </Typography>
+          <EmptyValue />
         )}
         <Tooltip title={t('views.colorEditValue')}>
           <span>

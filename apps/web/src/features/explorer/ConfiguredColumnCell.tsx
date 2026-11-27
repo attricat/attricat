@@ -5,7 +5,7 @@ import type { Attribute, RecordItem } from '../records/api';
 import type { ExtensionContribution } from '../extensions/api';
 import { resolveValueRenderer } from '../views/components/registry';
 import { AttributeValue } from '../views/components/values/AttributeValue';
-import { NotSetValue } from '../views/components/values/NotSetValue';
+import { EmptyValue } from '../../components/EmptyValue';
 import { attributeValueTypes } from '../records/valueTypes';
 import { linkedRecordsColumnMinWidth } from './constants';
 import { DeclaredCell } from './DeclaredCell';
@@ -21,7 +21,7 @@ import {
  * virtualized rendering).
  */
 const RelatedPathValue = ({ value }: { value: unknown }) => {
-  if (value === null || value === undefined) return <NotSetValue />;
+  if (value === null || value === undefined) return <EmptyValue />;
   const values = Array.isArray(value) ? value : [value];
   // Objects are JSON values; render them as JSON rather than plain text.
   if (values.some((item) => typeof item === 'object' && item !== null))
@@ -48,7 +48,7 @@ const isLinkedRecords = (value: unknown): value is LinkedRecords =>
  */
 const LinkedRecordsValue = ({ value }: { value: unknown }) => {
   if (!isLinkedRecords(value) || value.items.length === 0)
-    return <NotSetValue />;
+    return <EmptyValue />;
   const labels = value.items.map((item) => item.display || item.id);
   return (
     <Typography sx={{ minWidth: linkedRecordsColumnMinWidth }} variant="body2">
