@@ -12,7 +12,12 @@ import './zodErrors';
 export const supportedLanguages = ['en', 'pl'] as const;
 export type SupportedLanguage = (typeof supportedLanguages)[number];
 export const defaultLanguage: SupportedLanguage = 'en';
-const languageStorageKey = 'attricat.language';
+/**
+ * The language the person picked with the switcher. Before 1.9 the detected
+ * browser language was stored under `attricat.language` on every visit, so
+ * that key cannot tell a pick from a guess and is no longer read.
+ */
+export const languageStorageKey = 'attricat.language-choice';
 
 // i18next takes one backend: app strings load per language, workspace
 // lexicon namespaces come from the lexicon backend.

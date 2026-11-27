@@ -98,7 +98,7 @@ for (const locale of ['en', 'pl'] as const) {
     await page.addInitScript((language) => {
       // This also runs in extensions' sandboxed frames, which have no storage.
       if (window.origin !== 'null')
-        localStorage.setItem('attricat.language', language);
+        localStorage.setItem('attricat.language-choice', language);
     }, locale);
     const problems: string[] = [];
     let current = '';

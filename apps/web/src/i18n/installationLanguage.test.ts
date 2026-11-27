@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it } from 'vitest';
-import i18n, { applyInstallationLanguage, chooseLanguage } from '.';
-
-const languageStorageKey = 'attricat.language';
+import i18n, {
+  applyInstallationLanguage,
+  chooseLanguage,
+  languageStorageKey,
+} from '.';
 
 describe('the installation default language', () => {
   afterEach(async () => {
@@ -22,6 +24,12 @@ describe('the installation default language', () => {
     expect(localStorage.getItem(languageStorageKey)).toBe('en');
     await applyInstallationLanguage('pl');
     expect(i18n.resolvedLanguage).toBe('en');
+  });
+
+  it('ignores the language older versions stored on every visit', async () => {
+    localStorage.setItem('attricat.language', 'en');
+    await applyInstallationLanguage('pl');
+    expect(i18n.resolvedLanguage).toBe('pl');
   });
 
   it('leaves the language alone without a default', async () => {
