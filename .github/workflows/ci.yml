@@ -141,8 +141,15 @@ jobs:
       - run: pnpm --dir apps/docs build
 
   e2e:
+    # Each shard runs its own stack, database and browser on its own runner,
+    # so the specs need not be independent within a shared server.
+    name: e2e (${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_DEV_DEBUG: 0
@@ -178,12 +185,12 @@ jobs:
       # Build the API before Playwright starts it, so the server start-up wait
       # in global setup does not include compilation.
       - run: cargo build --locked -p api --bins
-      - run: node scripts/test-e2e.mjs
+      - run: node scripts/test-e2e.mjs --shard=${{ matrix.shard }}/${{ strategy.job-total }}
       - name: Upload Playwright results
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-results
+          name: playwright-results-${{ matrix.shard }}
           path: apps/web/test-results/
           retention-days: 7
 
