@@ -111,9 +111,13 @@ pub struct ConnectorJobTrigger {
 
 /// The most extension contributions one view may list under `extensions`.
 pub const MAX_VIEW_EXTENSIONS: usize = 32;
+/// The view whose `extensions` place record actions, tabs and form assists.
+pub const DETAIL_VIEW: &str = "detail";
+/// The view whose `extensions` place Explorer actions.
+pub const TABLE_VIEW: &str = "table";
 /// Views whose `extensions` list places contributions: `detail` (the record
 /// page and form) and `table` (the Explorer).
-pub const EXTENSION_VIEWS: &[&str] = &["detail", "table"];
+pub const EXTENSION_VIEWS: &[&str] = &[DETAIL_VIEW, TABLE_VIEW];
 /// View names with platform meaning, offered to editors as suggestions.
 pub const KNOWN_VIEW_NAMES: &[&str] = &[
     "dropdown_option",
@@ -352,7 +356,7 @@ impl ViewDefinition {
 pub fn view_extension_key(entry: &str) -> Option<(&str, &str)> {
     let (extension_id, contribution_id) = entry.split_once('/')?;
     let valid = |id: &str| {
-        (1..=MAX_EXTENSION_ID_BYTES).contains(&id.len())
+        (1..=MAX_VIEW_EXTENSION_ID_BYTES).contains(&id.len())
             && id
                 .bytes()
                 .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
@@ -360,8 +364,10 @@ pub fn view_extension_key(entry: &str) -> Option<(&str, &str)> {
     (valid(extension_id) && valid(contribution_id)).then_some((extension_id, contribution_id))
 }
 
-/// The longest extension or contribution ID a view `extensions` entry names.
-const MAX_EXTENSION_ID_BYTES: usize = 128;
+/// The longest extension or contribution ID a view `extensions` entry names:
+/// the manifest's identifier limit, which this crate cannot depend on; a
+/// repository test keeps the two equal.
+pub const MAX_VIEW_EXTENSION_ID_BYTES: usize = 128;
 
 /// The Explorer browse rail's default: a relationship field or path, or `false`.
 #[derive(Clone, Debug, Deserialize, JsonSchema, PartialEq, Serialize)]

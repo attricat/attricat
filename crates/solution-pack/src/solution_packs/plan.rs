@@ -856,32 +856,65 @@ fn plan_resource_mappings(
     Ok(mappings)
 }
 
-/// Per-blueprint extension contributions placed in its views.
-/// How a blueprint view's `extensions` entry stands in the workspace. Only
-/// a contribution that exists but targets another view, or declares none, is
-/// a warning: the host ignores entries for missing or disabled extensions,
-/// so a pack may list extensions installed later or separately.
+/// How a blueprint view's `extensions` entry stands in the workspace, as
+/// the plan reports it in `summary.view_extensions[].status`.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ViewExtensionStatus {
+    Available,
+    ExtensionNotInstalled,
+    ExtensionNotEnabled,
+    ContributionMissing,
+    ContributionHasNoView,
+    ContributionTargetsOtherView,
+}
+
+impl ViewExtensionStatus {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Available => "available",
+            Self::ExtensionNotInstalled => "extension_not_installed",
+            Self::ExtensionNotEnabled => "extension_not_enabled",
+            Self::ContributionMissing => "contribution_missing",
+            Self::ContributionHasNoView => "contribution_has_no_view",
+            Self::ContributionTargetsOtherView => "contribution_targets_other_view",
+        }
+    }
+
+    /// Only a contribution that exists but targets another view, or declares
+    /// none, is a warning: the host ignores entries for missing or disabled
+    /// extensions, so a pack may list extensions installed later or
+    /// separately.
+    const fn is_warning(self) -> bool {
+        matches!(
+            self,
+            Self::ContributionHasNoView | Self::ContributionTargetsOtherView
+        )
+    }
+}
+
 fn view_extension_status(
     view: &str,
     entry: &str,
     workspace: &PlanningWorkspaceSnapshot,
-) -> (&'static str, bool) {
+) -> ViewExtensionStatus {
     let (extension_id, contribution_id) =
         attricat_blueprint::view_extension_key(entry).expect("validated view extension entry");
     let Some(installed) = workspace.installed_extensions.get(extension_id) else {
-        return ("extension_not_installed", false);
+        return ViewExtensionStatus::ExtensionNotInstalled;
     };
     if installed.state != ExtensionState::Enabled && !installed.pending_install {
-        return ("extension_not_enabled", false);
+        return ViewExtensionStatus::ExtensionNotEnabled;
     }
     match installed
         .contribution_views
         .get(&format!("{extension_id}:{contribution_id}"))
     {
-        None => ("contribution_missing", false),
-        Some(None) => ("contribution_has_no_view", true),
-        Some(Some(declared)) if declared != view => ("contribution_targets_other_view", true),
-        Some(Some(_)) => ("available", false),
+        None => ViewExtensionStatus::ContributionMissing,
+        Some(None) => ViewExtensionStatus::ContributionHasNoView,
+        Some(Some(declared)) if declared != view => {
+            ViewExtensionStatus::ContributionTargetsOtherView
+        }
+        Some(Some(_)) => ViewExtensionStatus::Available,
     }
 }
 
@@ -899,12 +932,12 @@ fn plan_view_extensions(
                 .view_extensions()
                 .iter()
                 .map(|(view, entry)| {
-                    let (status, warning) = view_extension_status(view, entry, workspace);
+                    let status = view_extension_status(view, entry, workspace);
                     serde_json::json!({
                         "view": view,
                         "contribution": entry,
-                        "status": status,
-                        "warning": warning,
+                        "status": status.as_str(),
+                        "warning": status.is_warning(),
                     })
                 })
                 .collect();

@@ -2395,6 +2395,14 @@ mod layout_tests {
     use super::*;
 
     #[test]
+    fn view_extension_entries_take_ids_as_long_as_the_manifest_allows() {
+        assert_eq!(
+            attricat_blueprint::MAX_VIEW_EXTENSION_ID_BYTES,
+            crate::extensions::MAX_EXTENSION_IDENTIFIER_BYTES
+        );
+    }
+
+    #[test]
     fn stored_layouts_drop_placements_in_removed_outlets() {
         // Removed outlets, and outlets that blueprint views now place.
         let layout = without_removed_outlets(json!({

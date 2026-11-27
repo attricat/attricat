@@ -11,11 +11,12 @@ mod view_validation;
 pub use ast::{
     AttributeDeclaration, BlueprintDefinition, BlueprintKind, BrowseBy, CONNECTOR_JOB_DIRECTIONS,
     CONNECTOR_TRIGGER_EVENTS, CompiledBlueprint, ComponentReference, ConnectorJobDefinition,
-    ConnectorJobTrigger, EXTENSION_VIEWS, EditorReference, EffectiveAttribute, FilePolicy,
-    IncludeRef, IncomingDisplay, IncomingRelationship, KNOWN_VIEW_NAMES, LocalAttributeDeclaration,
-    MAX_UNIQUE_KEY_ATTRIBUTES, MAX_VIEW_EXTENSIONS, PublicationPolicy, ResolvedInclude,
-    TableColumn, UNIQUE_KEY_SCOPES, UniqueKeyDefinition, ViewDefinition, ViewNode, ViewSection,
-    ViewTab, view_extension_key,
+    ConnectorJobTrigger, DETAIL_VIEW, EXTENSION_VIEWS, EditorReference, EffectiveAttribute,
+    FilePolicy, IncludeRef, IncomingDisplay, IncomingRelationship, KNOWN_VIEW_NAMES,
+    LocalAttributeDeclaration, MAX_UNIQUE_KEY_ATTRIBUTES, MAX_VIEW_EXTENSION_ID_BYTES,
+    MAX_VIEW_EXTENSIONS, PublicationPolicy, ResolvedInclude, TABLE_VIEW, TableColumn,
+    UNIQUE_KEY_SCOPES, UniqueKeyDefinition, ViewDefinition, ViewNode, ViewSection, ViewTab,
+    view_extension_key,
 };
 pub use compiler::{canonical_definition_hash, compile, raw_hash};
 pub use component_manifest::validate_table_renderer;

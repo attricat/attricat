@@ -134,8 +134,8 @@ fn validate_view_extensions(
     }
     let invalid = |message: String| Err(BlueprintError::InvalidViewExtensions(message));
     let placed = match view {
-        "table" => matches!(definition, ViewDefinition::Table { .. }),
-        "detail" => !matches!(definition, ViewDefinition::Table { .. }),
+        crate::TABLE_VIEW => matches!(definition, ViewDefinition::Table { .. }),
+        crate::DETAIL_VIEW => !matches!(definition, ViewDefinition::Table { .. }),
         _ => false,
     };
     if !placed || *blueprint_kind != BlueprintKind::Record {
