@@ -55,17 +55,22 @@ fn validate_interval(interval_seconds: i32) -> Result<(), RepositoryError> {
     }
 }
 
+fn bounded_snapshot(value: &Value) -> Result<(), RepositoryError> {
+    if !value.is_object()
+        || serde_json::to_vec(value).map_or(true, |v| v.len() > MAX_SNAPSHOT_BYTES)
+    {
+        return Err(invalid("schedule snapshots must be bounded objects"));
+    }
+    Ok(())
+}
+
 fn safe_snapshot(
     input: &Value,
     source: &Value,
     destination: &Value,
 ) -> Result<(), RepositoryError> {
     for value in [input, source, destination] {
-        if !value.is_object()
-            || serde_json::to_vec(value).map_or(true, |v| v.len() > MAX_SNAPSHOT_BYTES)
-        {
-            return Err(invalid("schedule snapshots must be bounded objects"));
-        }
+        bounded_snapshot(value)?;
     }
     // Schedules cannot persist arbitrary request bodies, credentials or mutable
     // URLs. A pinned ready workspace file is the only supported input source.
@@ -143,11 +148,11 @@ impl AttricatRepository {
         }
         attricat_extension_manifest::validate_schema(&operation.request_schema, &input.input)
             .map_err(|_| invalid("schedule input does not match the operation schema"))?;
-        safe_snapshot(
-            &installation.configuration,
-            &serde_json::json!({}),
-            &serde_json::json!({}),
-        )?;
+        // The configuration was validated against the release's schema when it
+        // was set, and credentials live in extension secrets, never in
+        // configuration. Its key names are not checked: a setting such as
+        // `token_secret`, naming the secret to read, is not a credential.
+        bounded_snapshot(&installation.configuration)?;
         let id = Uuid::new_v4();
         // Validate the file now; occurrence creation revalidates its ready
         // state. The file stays locked until the schedule that references it
@@ -362,5 +367,17 @@ mod tests {
             .is_err()
         );
         assert!(safe_snapshot(&json!({}), &json!({}), &json!({})).is_ok());
+    }
+
+    #[test]
+    fn configuration_snapshot_allows_credential_like_names() {
+        let configuration = json!({
+            "account": "example",
+            "token_secret": "example-api-token",
+            "verify_webhook_token": true,
+        });
+        assert!(bounded_snapshot(&configuration).is_ok());
+        assert!(bounded_snapshot(&json!([])).is_err());
+        assert!(bounded_snapshot(&json!({"x": "y".repeat(MAX_SNAPSHOT_BYTES)})).is_err());
     }
 }

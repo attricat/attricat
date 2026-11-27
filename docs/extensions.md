@@ -672,7 +672,10 @@ task queue. Missed intervals and overlaps are skipped; disabled, quarantined
 or grant-revoked releases pause occurrence creation, as does a schedule an upgrade
 could not move to the new release. Schedules retain
 the release and validated input/configuration snapshot, not credentials, URLs
-or request bodies. Output, progress, status and errors use the existing
+or request bodies. Schedule input whose keys look like credentials (`token`,
+`secret`, `password`, …) is refused; the configuration snapshot is only
+bounded, since credentials belong in extension secrets and a setting such as
+`token_secret` merely names one. Output, progress, status and errors use the existing
 workspace-scoped run and artifact endpoints.
 
 ### Blueprint connector jobs
