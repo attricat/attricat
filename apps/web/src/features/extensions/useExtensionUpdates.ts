@@ -6,8 +6,12 @@ import { extensionManagementQueryKeys } from './managementQueryKeys';
 
 const extensionUpdatesStaleTimeMs = 5 * 60 * 1000;
 
-/** Newer reviewed versions of installed extensions; none until they load. */
-export const useExtensionUpdates = () => {
+/**
+ * Newer reviewed versions of installed extensions that this host can run,
+ * and whether the list has loaded: until it has, an empty list means
+ * "not known yet" rather than "up to date".
+ */
+export const useExtensionUpdateList = () => {
   const canRead = useCan(capabilities.extensionsRead);
   const updates = useQuery({
     queryKey: extensionManagementQueryKeys.updates(),
@@ -15,5 +19,8 @@ export const useExtensionUpdates = () => {
     enabled: canRead,
     staleTime: extensionUpdatesStaleTimeMs,
   });
-  return updates.data ?? [];
+  return { updates: updates.data ?? [], loaded: updates.isSuccess };
 };
+
+/** Newer reviewed versions of installed extensions; none until they load. */
+export const useExtensionUpdates = () => useExtensionUpdateList().updates;

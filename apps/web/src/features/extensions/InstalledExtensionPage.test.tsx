@@ -178,6 +178,45 @@ describe('InstalledExtensionPage', () => {
     );
   });
 
+  it('offers no release this host cannot run', async () => {
+    // The registry lists a release for a newer host; the update list, which
+    // checks compatibility, reports nothing.
+    vi.mocked(registryDetails).mockResolvedValue({
+      extension: {},
+      readme: '',
+      releases: [release(4, 'v2.0.0')],
+    } as never);
+    await renderPage({}, undefined, registrySource);
+    await waitFor(() => expect(registryDetails).toHaveBeenCalled());
+    await waitFor(() => expect(extensionUpdates).toHaveBeenCalled());
+    expect(
+      screen.queryByRole('heading', { name: /Update available/ }),
+    ).toBeNull();
+    expect(screen.queryByRole('button', { name: /Upgrade to/ })).toBeNull();
+  });
+
+  it('offers the compatible update and no newer release', async () => {
+    vi.mocked(extensionUpdates).mockResolvedValue([
+      {
+        extension_id: 'example',
+        installed_version: '1.0.0',
+        latest_version: '1.1.0',
+        repository: 'github:attricat/example',
+        registry_source: 'github:attricat/registry',
+      },
+    ]);
+    vi.mocked(registryDetails).mockResolvedValue({
+      extension: {},
+      readme: '',
+      releases: [release(4, 'v2.0.0'), release(2, 'v1.1.0')],
+    } as never);
+    await renderPage({}, undefined, registrySource);
+    expect(
+      await screen.findByRole('heading', { name: 'Update available: 1.1.0' }),
+    ).toBeTruthy();
+    expect(screen.queryByText(/2\.0\.0/)).toBeNull();
+  });
+
   it('offers no update or marketplace link for a side-loaded extension', async () => {
     await renderPage({});
     expect(

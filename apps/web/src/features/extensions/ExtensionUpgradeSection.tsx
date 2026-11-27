@@ -21,7 +21,7 @@ import {
   type ExtensionInstallation,
 } from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
-import { useExtensionUpdates } from './useExtensionUpdates';
+import { useExtensionUpdateList } from './useExtensionUpdates';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { Timestamp } from '../../time/Timestamp';
 
@@ -66,24 +66,26 @@ export const ExtensionUpgradeSection = ({
     queryFn: () => registryDetails(owner, repository),
     enabled: marketplace !== undefined,
   });
-  // The update list knows which versions this host can run, so its version
-  // leads; the newest release stands in until it loads.
-  const reported = useExtensionUpdates().find(
+  // Only the update list knows which versions this host can run: the
+  // registry also lists releases for newer hosts. So nothing is offered
+  // until it loads, then only its version and older releases.
+  const updateList = useExtensionUpdateList();
+  const reported = updateList.updates.find(
     (update) => update.extension_id === installation.extension_id,
   );
   const releases = (upgrades.data?.releases ?? []).filter(
     (release) =>
       release.tag_name !== installedTag &&
-      isNewerRelease(release.tag_name, installation.version),
+      isNewerRelease(release.tag_name, installation.version) &&
+      reported !== undefined &&
+      !isNewerRelease(release.tag_name, reported.latest_version),
   );
   if (upgrades.error) return <ApiErrorAlert error={upgrades.error} />;
-  const latest =
-    releases.find(
-      (release) =>
-        reported &&
-        releaseTagVersion(release.tag_name) === reported.latest_version,
-    ) ?? releases[0];
-  if (!latest) return null;
+  const latest = releases.find(
+    (release) =>
+      releaseTagVersion(release.tag_name) === reported?.latest_version,
+  );
+  if (!updateList.loaded || !latest) return null;
   const others = releases.filter((release) => release !== latest);
   const upgradeButton = (release: DiscoveredRelease, primary: boolean) => (
     <Button
