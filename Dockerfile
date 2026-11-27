@@ -18,7 +18,9 @@ FROM rust:trixie AS rust-builder
 # Wasmtime/Cranelift is memory-intensive under full dependency optimization.
 # Level 1 still produces an optimized runtime while keeping release builds viable
 # on ordinary CI runners; one cargo job prevents parallel compiler spikes.
-ENV CARGO_BUILD_JOBS=1 CARGO_PROFILE_RELEASE_OPT_LEVEL=1
+# Local snapshot builds may raise it with ATTRICAT_SNAPSHOT_JOBS.
+ARG CARGO_BUILD_JOBS=1
+ENV CARGO_BUILD_JOBS=$CARGO_BUILD_JOBS CARGO_PROFILE_RELEASE_OPT_LEVEL=1
 # This copy intentionally sequences the memory-heavy frontend and Rust builds.
 COPY --from=web-builder /src/apps/web/dist /tmp/web-dist
 WORKDIR /src
@@ -33,13 +35,18 @@ ARG VCS_REF=unknown
 ARG VCS_BRANCH=unknown
 ENV ATTRICAT_BUILD_COMMIT=$VCS_REF ATTRICAT_BUILD_BRANCH=$VCS_BRANCH
 # BuildKit cache mounts keep the registry and compiled dependencies between
-# builds on the same host, so repeat local builds recompile only changed
-# crates. A fresh CI runner starts with empty caches. The target directory is a
+# builds on the same host, so repeat local builds reuse compiled
+# dependencies. A fresh CI runner starts with empty caches. The target directory is a
 # cache mount, so the binaries are copied out before the step ends.
+# Cargo judges workspace crates fresh by file times, and `git archive` dates
+# every file to its commit, so an older commit built after a newer one would
+# reuse the newer build. Dating the sources now rebuilds the workspace crates
+# every time; compiled dependencies stay cached.
 RUN --mount=type=cache,id=attricat-cargo-registry,target=/usr/local/cargo/registry \
     --mount=type=cache,id=attricat-cargo-git,target=/usr/local/cargo/git \
     --mount=type=cache,id=attricat-cargo-target,target=/src/target \
-    cargo build --locked --release -p api --bins -p acli --bin acli \
+    find apps crates contracts docs Cargo.toml Cargo.lock -type f -exec touch {} + \
+ && cargo build --locked --release -p api --bins -p acli --bin acli \
  && mkdir -p /out \
  && cp target/release/api target/release/file-worker target/release/migrate target/release/acli /out/
 
