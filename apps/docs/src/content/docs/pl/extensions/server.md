@@ -202,7 +202,9 @@ Polecenie działa z uprawnieniami rozszerzenia, a nie użytkownika. Sprawdź w p
 
 ## Sekrety
 
-Z `secrets.read` wywołanie `secrets.get.v1` z `{"name": "destination-token"}` zwraca `{"value": "…"}` tylko na potrzeby bieżącego wywołania. Wartości sekretów nigdy nie pojawiają się w konfiguracji, dziennikach, śladach, błędach ani rekordach audytu.
+Z `secrets.read` wywołanie `secrets.get.v1` z `{"name": "destination-token"}` zwraca `{"value": "…"}` tylko na potrzeby bieżącego wywołania. Sekrety należą do Twojego rozszerzenia: odczytujesz tylko te, które administrator ustawił dla niego, nigdy sekretów innego rozszerzenia, a nazwa, której nikt nie ustawił, zwraca błąd. Wartości sekretów nigdy nie pojawiają się w konfiguracji, dziennikach, śladach, błędach ani rekordach audytu.
+
+[Zadeklaruj](/pl/extensions/manifest/#sekrety) oczekiwane sekrety w `server.secrets`, aby administratorzy wiedzieli, co ustawić.
 
 ## Wywołuj usługi zewnętrzne
 
@@ -235,7 +237,7 @@ Broker nigdy nie ponawia żądań. Przekroczenie limitu czasu lub błąd połąc
 
 - ciąg zapytania w `url`, jeśli pasująca reguła ustawia `allow_query: true`, dla parametrów takich jak `?marketplaceIds=` albo podpisanych adresów URL. Wartości zapytania nigdy nie trafiają do dzienników, śladów, metryk, błędów ani zapisanej historii dostarczeń;
 - `body_base64` dla treści binarnej, zamiast `body`;
-- `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, które wstawia sekrety obszaru roboczego do treści formularza lub JSON. `field` w JSON to klucz najwyższego poziomu albo wskaźnik JSON (JSON pointer). Komponent nigdy nie widzi sekretu;
+- `secret_body: {"format": "form" | "json", "fields": [{"field", "secret"}]}`, które wstawia sekrety rozszerzenia do treści formularza lub JSON. `field` w JSON to klucz najwyższego poziomu albo wskaźnik JSON (JSON pointer). Komponent nigdy nie widzi sekretu;
 - `connection`, które dodaje do żądania token dostępu [połączenia](/pl/extensions/exports/#połączenia).
 
 ```json

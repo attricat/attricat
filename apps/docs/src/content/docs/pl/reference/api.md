@@ -496,7 +496,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/extensions/runtime` | Włączone kontrybucje klienta z rozszerzeń. |
 | `PUT` | `/workspace/extensions-mode` | `{"enabled": false}` wyłącza wszystkie rozszerzenia w obszarze roboczym. |
 | `GET`, `PUT` | `/workspace/extension-layout` | Układ kontrybucji. |
-| `GET`, `PUT`, `DELETE` | `/workspace/extension-secrets[/{name}]` | Sekrety (przy odczycie tylko nazwy). |
+| `GET`, `PUT`, `DELETE` | `/extensions/{id}/secrets[/{name}]` | Sekrety rozszerzenia: przy odczycie deklarowane i ustawione, tylko z nazwami; wartości tylko do zapisu. Wymaga `extensions.manage`, także do odczytu. |
 | `POST` | `/extensions/{id}/operations` | Rozpoczyna operację. `{"operation_id", "input", "idempotency_key", "source_reference"?, "destination_reference"?}`. Zwraca `202` z `id`. |
 | `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Uruchomienia, wyniki, dostarczenia. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Pobiera wynik. |

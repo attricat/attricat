@@ -118,6 +118,7 @@ mod extension_operation_staging;
 mod extension_operations;
 mod extension_registries;
 mod extension_scoped_configuration;
+mod extension_secrets;
 mod extension_storage;
 mod extension_webhooks;
 mod extensions;
@@ -278,6 +279,10 @@ pub use extension_operations::{
 };
 pub use extension_registries::ExtensionRegistrySource;
 pub use extension_scoped_configuration::ExtensionConfigurationScope;
+pub use extension_secrets::{
+    ExtensionSecret, MAX_EXTENSION_SECRET_NAME_BYTES, MAX_EXTENSION_SECRET_VALUE_BYTES,
+    valid_extension_secret_name,
+};
 pub use extension_storage::{
     ExtensionStorageEntry, ExtensionStorageError, ExtensionStoragePage,
     MAX_EXTENSION_STORAGE_LIST_LIMIT,

@@ -8,7 +8,7 @@ import {
   installationSchema,
   registryDetailsSchema,
   workspaceExtensionLayoutSchema,
-  workspaceExtensionSecretSchema,
+  extensionSecretSchema,
   type WorkspaceExtensionLayout,
 } from './schemas';
 import { extensionsApiPath, extensionPath } from './apiPaths';
@@ -39,28 +39,37 @@ export const updateWorkspaceExtensionLayout = (
     '/api/workspace/extension-layout',
     jsonRequest('PUT', layout),
   );
-const workspaceExtensionSecretsPath = '/api/workspace/extension-secrets';
-const workspaceExtensionSecretPath = (name: string) =>
-  `${workspaceExtensionSecretsPath}/${encodeURIComponent(name)}`;
-export const workspaceExtensionSecrets = () =>
-  request(
-    workspaceExtensionSecretsPath,
-    z.array(workspaceExtensionSecretSchema),
-  );
+const extensionSecretsPath = (extensionId: string) =>
+  `${extensionPath(extensionId)}/secrets`;
+const extensionSecretPath = (extensionId: string, name: string) =>
+  `${extensionSecretsPath(extensionId)}/${encodeURIComponent(name)}`;
+/** The secrets the extension declares and those set for it, without values. */
+export const extensionSecrets = (extensionId: string) =>
+  request(extensionSecretsPath(extensionId), z.array(extensionSecretSchema));
 /** Creates the secret, or replaces the value of one with the same name. */
-export const putWorkspaceExtensionSecret = ({
+export const putExtensionSecret = ({
+  extensionId,
   name,
   value,
 }: {
+  extensionId: string;
   name: string;
   value: string;
 }) =>
   requestNoContent(
-    workspaceExtensionSecretPath(name),
+    extensionSecretPath(extensionId, name),
     jsonRequest('PUT', { value }),
   );
-export const deleteWorkspaceExtensionSecret = (name: string) =>
-  requestNoContent(workspaceExtensionSecretPath(name), { method: 'DELETE' });
+export const deleteExtensionSecret = ({
+  extensionId,
+  name,
+}: {
+  extensionId: string;
+  name: string;
+}) =>
+  requestNoContent(extensionSecretPath(extensionId, name), {
+    method: 'DELETE',
+  });
 export const extensionDetail = (id: string) =>
   request(extensionPath(id), detailSchema);
 export const installExtension = (input: ExtensionReleaseReference) =>

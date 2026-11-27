@@ -5,44 +5,50 @@ import { useTranslation } from 'react-i18next';
 import { FormDialog } from '../../components/FormDialog';
 import { monoFontFamily } from '../../app/theme';
 import { extensionSecretLimits, extensionSecretNamePattern } from './constants';
-import { putWorkspaceExtensionSecret } from './managementApi';
+import { putExtensionSecret } from './managementApi';
 import { utf8ByteLength } from './utf8';
 
 type Props = {
-  /** Names already stored; a new secret cannot silently replace one. */
+  /** Names the extension declares or has set; a new name cannot reuse one. */
   existingNames: ReadonlySet<string>;
+  extensionId: string;
+  /** The secret whose value is set; omitted to add a secret by a new name. */
+  name?: string;
   onClose: () => void;
   onSaved: (name: string) => void;
-  /** The secret whose value is replaced; omitted to add a new secret. */
-  replacing?: string;
+  /** Whether the named secret already has a value this one replaces. */
+  replacing: boolean;
 };
 
 /**
- * Adds a workspace extension secret or replaces the value of one. The value
- * is write-only: it is never shown again, so the field always starts empty.
+ * Sets the value of one of an extension's secrets, or adds a secret by a name
+ * its manifest does not declare. The value is write-only: it is never shown
+ * again, so the field always starts empty.
  */
 export const ExtensionSecretDialog = ({
   existingNames,
+  extensionId,
+  name: fixedName,
   onClose,
   onSaved,
   replacing,
 }: Props) => {
   const { t } = useTranslation();
   const save = useMutation({
-    // The page shows its own message.
+    // The section shows its own message.
     meta: { toast: false },
     // The value is write-only, so the mutation leaves the cache as soon as
     // the dialog closes instead of keeping it for the default five minutes.
     gcTime: 0,
-    mutationFn: putWorkspaceExtensionSecret,
+    mutationFn: putExtensionSecret,
     onSuccess: (_, { name }) => onSaved(name),
   });
   const form = useForm({
-    defaultValues: { name: replacing ?? '', value: '' },
-    onSubmit: ({ value }) => save.mutate(value),
+    defaultValues: { name: fixedName ?? '', value: '' },
+    onSubmit: ({ value }) => save.mutate({ extensionId, ...value }),
   });
   const validateName = (name: string) => {
-    if (replacing) return undefined;
+    if (fixedName) return undefined;
     if (!name) return t('validation.required');
     if (
       !extensionSecretNamePattern.test(name) ||
@@ -73,16 +79,23 @@ export const ExtensionSecretDialog = ({
       submitLabel={
         replacing
           ? t('extensions.replaceSecretValue')
-          : t('extensions.addSecret')
+          : fixedName
+            ? t('extensions.setSecretValue')
+            : t('extensions.addSecret')
       }
       title={
-        replacing
-          ? t('extensions.replaceSecretTitle', { name: replacing })
+        fixedName
+          ? t(
+              replacing
+                ? 'extensions.replaceSecretTitle'
+                : 'extensions.setSecretTitle',
+              { name: fixedName },
+            )
           : t('extensions.addSecret')
       }
     >
       <Stack spacing={2} sx={{ pt: 2 }}>
-        {!replacing && (
+        {!fixedName && (
           <form.Field
             name="name"
             validators={{

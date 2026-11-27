@@ -125,20 +125,6 @@ pub const MAX_HOST_TIMEOUT_MILLIS: u64 = 60_000;
 /// The largest bulk transfer a host permission may grant.
 pub const MAX_HOST_TRANSFER_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_EXTENSION_IDENTIFIER_BYTES: usize = 128;
-/// The most bytes in a workspace extension secret's value.
-pub const MAX_EXTENSION_SECRET_VALUE_BYTES: usize = 65_536;
-
-/// Whether `name` can name a workspace extension secret, by the same rule
-/// the runtime applies when an extension reads one: up to
-/// [`MAX_EXTENSION_IDENTIFIER_BYTES`] of ASCII letters, digits, `.`, `_`
-/// and `-`.
-pub fn valid_extension_secret_name(name: &str) -> bool {
-    !name.is_empty()
-        && name.len() <= MAX_EXTENSION_IDENTIFIER_BYTES
-        && name
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'_' | b'-'))
-}
 /// Initial interactive operations keep the Explorer bulk-selection bound; a
 /// larger, server-managed selection resource is a separate contract.
 pub const MAX_INTERACTIVE_SELECTION: u32 = 50;
@@ -175,7 +161,7 @@ pub const CAPABILITIES: &[&str] = &[
     "client.explorer_table_cell",
     "client.blueprint_detail_panel",
     "client.record_tab",
-    "secrets.read",
+    SECRETS_READ_CAPABILITY,
     "logging.write",
     "client.navigation",
     "client.notification",
@@ -207,6 +193,10 @@ pub const CAPABILITIES: &[&str] = &[
     WEBHOOKS_RECEIVE_CAPABILITY,
     FORM_ASSIST_CAPABILITY,
 ];
+
+/// Reads the extension's own secrets at run time (`secrets.get.v1`) and names
+/// them in mediated requests (`secret_headers`, `secret_body`).
+pub const SECRETS_READ_CAPABILITY: &str = "secrets.read";
 
 /// Receives inbound webhooks: the host answers declared webhooks' public
 /// endpoints through the component's `webhook-receiver` export.
@@ -532,7 +522,34 @@ pub struct Server {
     /// these; the component answers each request and may keep its payload.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub webhooks: Vec<Webhook>,
+    /// Secrets the extension expects operators to set, so management can name
+    /// and describe them and point out required ones that are missing. The
+    /// component may still read secrets it does not declare, such as one per
+    /// webhook endpoint.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub secrets: Vec<SecretDeclaration>,
 }
+
+/// A secret the extension expects an operator to set.
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct SecretDeclaration {
+    /// The secret's name, as `secrets.get.v1` and mediated requests use it.
+    pub name: String,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    /// Whether the extension cannot do its work until the secret is set.
+    #[serde(default)]
+    pub required: bool,
+}
+
+/// The most secrets one release may declare.
+pub const MAX_SECRET_DECLARATIONS: usize = 32;
+/// The longest secret description a manifest may give.
+const MAX_SECRET_DESCRIPTION_BYTES: usize = 1_000;
+/// The longest secret name, matching the stored name's limit.
+pub const MAX_SECRET_NAME_BYTES: usize = 128;
 
 /// An inbound webhook an operator can create endpoints for.
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -1892,6 +1909,7 @@ impl Manifest {
             }
             self.validate_connections_and_exports(server)?;
             self.validate_webhooks(server)?;
+            self.validate_secret_declarations(server)?;
             if (!server.event_handlers.is_empty()
                 || !server.commands.is_empty()
                 || !server.operations.is_empty()
@@ -2403,6 +2421,47 @@ impl Manifest {
                 return Err(ManifestError::Invalid(format!(
                     "webhook '{}' max_body_bytes must be between 1 and {MAX_WEBHOOK_BODY_BYTES}",
                     webhook.id
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_secret_declarations(&self, server: &Server) -> Result<(), ManifestError> {
+        if server.secrets.is_empty() {
+            return Ok(());
+        }
+        unique(server.secrets.iter().map(|secret| &secret.name), "secret")?;
+        if server.secrets.len() > MAX_SECRET_DECLARATIONS {
+            return Err(ManifestError::Invalid(format!(
+                "at most {MAX_SECRET_DECLARATIONS} secrets may be declared"
+            )));
+        }
+        if !self.declares(SECRETS_READ_CAPABILITY) {
+            return Err(ManifestError::Invalid(format!(
+                "secrets require {SECRETS_READ_CAPABILITY}"
+            )));
+        }
+        for secret in &server.secrets {
+            valid_id(&secret.name, "secret name")?;
+            if secret.name.len() > MAX_SECRET_NAME_BYTES {
+                return Err(ManifestError::Invalid(format!(
+                    "secret name '{}' is longer than {MAX_SECRET_NAME_BYTES} bytes",
+                    secret.name
+                )));
+            }
+            if secret.title.trim().is_empty() || secret.title.len() > MAX_TITLE_BYTES {
+                return Err(ManifestError::Invalid(format!(
+                    "secret '{}' needs a title of at most {MAX_TITLE_BYTES} bytes",
+                    secret.name
+                )));
+            }
+            if secret.description.as_ref().is_some_and(|text| {
+                text.trim().is_empty() || text.len() > MAX_SECRET_DESCRIPTION_BYTES
+            }) {
+                return Err(ManifestError::Invalid(format!(
+                    "secret '{}' description must be non-empty and at most {MAX_SECRET_DESCRIPTION_BYTES} bytes",
+                    secret.name
                 )));
             }
         }
@@ -3332,17 +3391,6 @@ pub fn validate_schema(schema: &Value, value: &Value) -> Result<(), ManifestErro
 mod tests {
     use super::*;
 
-    #[test]
-    fn secret_names_follow_the_runtime_rule() {
-        let longest = "a".repeat(MAX_EXTENSION_IDENTIFIER_BYTES);
-        for valid in ["client-secret", "acme.token_1", longest.as_str()] {
-            assert!(valid_extension_secret_name(valid), "{valid}");
-        }
-        let too_long = "a".repeat(MAX_EXTENSION_IDENTIFIER_BYTES + 1);
-        for invalid in ["", "has space", "slash/name", "ąę", too_long.as_str()] {
-            assert!(!valid_extension_secret_name(invalid), "{invalid}");
-        }
-    }
 
     #[test]
     fn host_api_ranges_must_accept_the_supported_abi() {
@@ -4592,6 +4640,55 @@ mod tests {
             parsed.server.unwrap().webhooks[0].max_body_bytes,
             DEFAULT_WEBHOOK_BODY_BYTES
         );
+    }
+
+    #[test]
+    fn validates_secret_declarations() {
+        let secret = |name: &str| SecretDeclaration {
+            name: name.into(),
+            title: "API key".into(),
+            description: None,
+            required: true,
+        };
+        let mut value = manifest();
+        fn secrets(value: &mut Manifest) -> &mut Vec<SecretDeclaration> {
+            &mut value.server.as_mut().unwrap().secrets
+        }
+        secrets(&mut value).push(secret("api-key"));
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_err(),
+            "needs the capability"
+        );
+        value.permissions.push(SECRETS_READ_CAPABILITY.into());
+        assert!(value.validate(SUPPORTED_HOST_API).is_ok());
+        secrets(&mut value).push(secret("api-key"));
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_err(),
+            "duplicate name"
+        );
+        secrets(&mut value).pop();
+        secrets(&mut value)[0].title = " ".into();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err(), "blank title");
+        secrets(&mut value)[0] = secret("bad name");
+        assert!(value.validate(SUPPORTED_HOST_API).is_err(), "bad name");
+        secrets(&mut value)[0] = secret(&"a".repeat(MAX_SECRET_NAME_BYTES + 1));
+        assert!(value.validate(SUPPORTED_HOST_API).is_err(), "long name");
+        secrets(&mut value)[0] = secret("api-key");
+        secrets(&mut value)[0].description = Some(String::new());
+        assert!(
+            value.validate(SUPPORTED_HOST_API).is_err(),
+            "empty description"
+        );
+        *secrets(&mut value) = (0..=MAX_SECRET_DECLARATIONS)
+            .map(|index| secret(&format!("key-{index}")))
+            .collect();
+        assert!(value.validate(SUPPORTED_HOST_API).is_err(), "too many");
+
+        let mut raw = serde_json::to_value(manifest()).unwrap();
+        raw["permissions"] = serde_json::json!(["network.request", SECRETS_READ_CAPABILITY]);
+        raw["server"] = serde_json::json!({"secrets": [{"name": "api-key", "title": "API key"}]});
+        let parsed: Manifest = serde_json::from_value(raw).unwrap();
+        assert!(!parsed.server.unwrap().secrets[0].required);
     }
 
     #[test]

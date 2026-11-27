@@ -322,7 +322,7 @@ impl OperationState {
         for (secret, name) in secrets.iter().zip(names) {
             let value = host
                 .repository
-                .workspace_extension_secret_value(&secret.secret)
+                .extension_secret_value(&host.installation.extension_id, &secret.secret)
                 .await
                 .map_err(|_| "secret lookup failed")?
                 .ok_or("secret reference unavailable")?;

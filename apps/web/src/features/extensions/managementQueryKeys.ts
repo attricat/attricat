@@ -12,7 +12,8 @@ export const extensionManagementQueryKeys = {
   installed: () => [...extensionManagementQueryKeys.all, 'installed'] as const,
   updates: () => [...extensionManagementQueryKeys.all, 'updates'] as const,
   layout: () => [...extensionManagementQueryKeys.all, 'layout'] as const,
-  secrets: () => [...extensionManagementQueryKeys.all, 'secrets'] as const,
+  secrets: (extensionId: string) =>
+    [...extensionManagementQueryKeys.all, 'secrets', extensionId] as const,
   detail: (id: string) =>
     [...extensionManagementQueryKeys.all, 'detail', id] as const,
 };

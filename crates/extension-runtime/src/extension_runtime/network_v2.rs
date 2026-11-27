@@ -333,7 +333,7 @@ impl HostState {
             if !secrets.contains_key(name) {
                 let value = self
                     .repository
-                    .workspace_extension_secret_value(name)
+                    .extension_secret_value(&self.installation.extension_id, name)
                     .await
                     .map_err(|_| "secret lookup failed")?
                     .ok_or_else(|| "secret reference is unavailable".to_owned())?;

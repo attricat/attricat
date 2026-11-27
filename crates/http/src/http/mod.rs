@@ -15,6 +15,7 @@ mod extension_field_notes;
 mod extension_form_assist;
 mod extension_registries;
 mod extension_runs;
+mod extension_secrets;
 mod extension_webhooks;
 mod extensions;
 mod extractors;
@@ -617,14 +618,6 @@ pub fn router(state: AppState) -> Router {
             put(extensions::set_workspace_mode),
         )
         .route(
-            "/workspace/extension-secrets",
-            get(extensions::list_workspace_secrets),
-        )
-        .route(
-            "/workspace/extension-secrets/{name}",
-            put(extensions::put_workspace_secret).delete(extensions::delete_workspace_secret),
-        )
-        .route(
             "/extensions/{extension_id}",
             get(extensions::detail).delete(extensions::remove),
         )
@@ -778,6 +771,14 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/public/extension-webhooks/{token}",
             get(extension_webhooks::receive).post(extension_webhooks::receive),
+        )
+        .route(
+            "/extensions/{extension_id}/secrets",
+            get(extension_secrets::list),
+        )
+        .route(
+            "/extensions/{extension_id}/secrets/{name}",
+            put(extension_secrets::put).delete(extension_secrets::delete),
         )
         .route(
             "/extensions/{extension_id}/webhook-endpoints",

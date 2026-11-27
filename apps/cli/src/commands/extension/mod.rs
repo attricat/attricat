@@ -226,7 +226,7 @@ pub(crate) enum ExtensionCommand {
         #[command(subcommand)]
         command: BudgetCommand,
     },
-    /// Workspace secrets that extension configuration can reference.
+    /// An extension's secrets, which only its component can read.
     Secret {
         #[command(subcommand)]
         command: SecretCommand,
@@ -261,15 +261,20 @@ pub(crate) enum BudgetCommand {
 
 #[derive(Subcommand)]
 pub(crate) enum SecretCommand {
-    /// List secret names; values are never returned.
-    List,
+    /// List the secrets the extension declares and those set for it; values
+    /// are never returned.
+    List {
+        extension_id: String,
+    },
     /// Create or replace a secret with the value on standard input.
     Set {
+        extension_id: String,
         name: String,
         #[arg(long, required = true)]
         value_stdin: bool,
     },
     Delete {
+        extension_id: String,
         name: String,
     },
 }
@@ -502,18 +507,21 @@ pub(crate) async fn extension_command(
         ExtensionCommand::Export { command } => export_command(api, command).await,
         ExtensionCommand::Budget { command } => budget_command(api, command).await,
         ExtensionCommand::Secret { command } => match command {
-            SecretCommand::List => api.get(SECRETS_PATH).await,
-            SecretCommand::Set { name, .. } => {
+            SecretCommand::List { extension_id } => {
+                api.get(&extension_path(&extension_id, "/secrets")).await
+            }
+            SecretCommand::Set {
+                extension_id, name, ..
+            } => {
                 let value = read_secret_stdin("secret value")?;
                 api.put_json(
-                    &format!("{SECRETS_PATH}/{}", segment(&name)),
+                    &secret_path(&extension_id, &name),
                     json!({ "value": value }),
                 )
                 .await
             }
-            SecretCommand::Delete { name } => {
-                api.delete(&format!("{SECRETS_PATH}/{}", segment(&name)))
-                    .await
+            SecretCommand::Delete { extension_id, name } => {
+                api.delete(&secret_path(&extension_id, &name)).await
             }
         },
         ExtensionCommand::Layout { command } => match command {
@@ -526,7 +534,10 @@ pub(crate) async fn extension_command(
     }
 }
 
-const SECRETS_PATH: &str = "/workspace/extension-secrets";
+fn secret_path(extension_id: &str, name: &str) -> String {
+    extension_path(extension_id, &format!("/secrets/{}", segment(name)))
+}
+
 const LAYOUT_PATH: &str = "/workspace/extension-layout";
 
 async fn budget_command(api: &Api, command: BudgetCommand) -> Result<String, CliError> {

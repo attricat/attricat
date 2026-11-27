@@ -55,25 +55,27 @@ W miejscach wspólnych dla wszystkich schematów, takich jak nawigacja i panele,
 
 ## Sekrety
 
-Rozszerzenia wywołujące usługi zewnętrzne często potrzebują klucza API. Zapisz go jako nazwany sekret rozszerzeń obszaru roboczego w **Zarządzanie → Rozszerzenia → Sekrety**: **Dodaj sekret** prosi o nazwę podaną w dokumentacji rozszerzenia i o wartość. Nazwy składają się z liter, cyfr, kropek, łączników i podkreśleń i mają maksymalnie 128 znaków.
+Rozszerzenia wywołujące usługi zewnętrzne często potrzebują klucza API albo klucza do podpisów. Każdy sekret należy do jednego rozszerzenia: otwórz rozszerzenie w **Zarządzanie → Rozszerzenia** i jego kartę **Sekrety**, widoczną dla rozszerzeń z uprawnieniem `secrets.read`. Żadne inne rozszerzenie nie odczyta ustawionego tam sekretu, nawet pod tą samą nazwą.
 
-Wartości są tylko do zapisu: nikt nie może ich odczytać, a rozszerzenie z `secrets.read` otrzymuje wartość tylko w trakcie działania. Lista pokazuje każdą nazwę i to, kiedy ostatnio ustawiono jej wartość. **Zastąp wartość** zmienia sekret bez zmiany nazwy, a po usunięciu sekretu korzystające z niego rozszerzenia nie zadziałają, dopóki nie dodasz go ponownie.
+Karta pokazuje sekrety deklarowane przez rozszerzenie wraz z ich opisami i oznacza wymagane, które nie są jeszcze ustawione; ostrzega o nich także przegląd rozszerzenia. **Ustaw wartość** zapisuje sekret. **Dodaj sekret** zapisuje sekret pod nazwą, której rozszerzenie nie deklaruje, na przykład taką, o którą jego dokumentacja prosi dla każdego punktu końcowego webhooka. Nazwy składają się z liter, cyfr, kropek, łączników i podkreśleń i mają maksymalnie 128 znaków.
+
+Wartości są tylko do zapisu: nikt nie może ich odczytać, a rozszerzenie otrzymuje wartość tylko w trakcie działania. Attricat przechowuje je zaszyfrowane kluczem [`extension_credential_key`](/pl/reference/configuration/#sekrety) wdrożenia, więc bez niego nie można ustawiać sekretów. Lista pokazuje, kiedy ostatnio ustawiono każdą wartość. **Zastąp wartość** zmienia sekret bez zmiany nazwy, a po usunięciu sekretu rozszerzenie nie zadziała tam, gdzie go potrzebuje, dopóki nie ustawisz go ponownie. Usunięcie rozszerzenia usuwa jego sekrety.
 
 Automatyzacja może zrobić to samo przez API, z tokenem uprawnionym do zarządzania rozszerzeniami:
 
 ```http
-PUT /workspace/extension-secrets/destination-token
+PUT /extensions/acme.shop/secrets/destination-token
 {"value": "…"}
 ```
 
-`GET /workspace/extension-secrets` zwraca wyłącznie nazwy, a `DELETE` usuwa sekret.
+`GET /extensions/acme.shop/secrets` zwraca deklarowane i ustawione sekrety, wyłącznie z nazwami, a `DELETE` usuwa sekret.
 
 [CLI](/pl/reference/cli/#rozszerzenia) ma te same polecenia. `set` odczytuje wartość ze standardowego wejścia, więc nie trafia ona do historii powłoki:
 
 ```sh
-acli extension secret list
-printf '%s' "$VALUE" | acli extension secret set destination-token --value-stdin
-acli extension secret delete destination-token
+acli extension secret list acme.shop
+printf '%s' "$VALUE" | acli extension secret set acme.shop destination-token --value-stdin
+acli extension secret delete acme.shop destination-token
 ```
 
 ## Połączenia

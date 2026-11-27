@@ -82,7 +82,7 @@ cd ../..
 docker compose --env-file deploy/.env.production -f deploy/compose.yml up -d
 ```
 
-Pozostaw plik pusty, aby wyłączyć daną funkcję. Logowanie jednokrotne wymaga `identity_provider_credential_key`, połączenia rozszerzeń wymagają `extension_credential_key`, a API operatora wymaga `operator_api_token`. Każde ustawienie jest opisane w [dokumentacji konfiguracji](/pl/reference/configuration/).
+Pozostaw plik pusty, aby wyłączyć daną funkcję. Logowanie jednokrotne wymaga `identity_provider_credential_key`, połączenia i sekrety rozszerzeń wymagają `extension_credential_key`, a API operatora wymaga `operator_api_token`. Każde ustawienie jest opisane w [dokumentacji konfiguracji](/pl/reference/configuration/).
 
 ## Pierwsze uruchomienie
 

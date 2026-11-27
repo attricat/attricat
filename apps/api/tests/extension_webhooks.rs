@@ -140,8 +140,9 @@ impl Fixture {
             PERMISSIONS,
         )
         .await;
+        api::repository::use_extension_credential_key(TEST_CREDENTIAL_KEY);
         repository
-            .put_workspace_extension_secret("webhook-secret", SECRET)
+            .put_extension_secret(EXTENSION, "webhook-secret", SECRET)
             .await
             .unwrap();
         let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;

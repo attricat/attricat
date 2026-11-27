@@ -69,7 +69,7 @@ List capabilities in `permissions` or `optional_permissions`. Each one allows a 
 | `storage.extension` | Reading and writing the extension's own key-value storage. |
 | `configuration.read` | Reading the installation configuration. |
 | `configuration.write` | Reading and writing scoped configuration. |
-| `secrets.read` | Reading named workspace secrets at run time. |
+| `secrets.read` | Reading the extension's own [secrets](/extensions/server/#secrets) at run time. Required to declare `server.secrets`. |
 | `logging.write` | Writing log messages. |
 | `artifacts.read`, `artifacts.write` | Reading operation inputs and writing operation outputs. |
 | `attricat.annotations.write` | Writing this extension's own namespace of record tags and metadata. See [Record annotations](/extensions/operations/#record-annotations). |
@@ -213,6 +213,7 @@ Exported event types must start with `plugin.<extension-id>.` and end in `.vN`. 
 | `connections` | See [Connections](#connections). | `connections.use` |
 | `exports` | See [Export destinations](#export-destinations). | `exports.mappings` |
 | `webhooks` | Up to 16 of `{id, title, max_body_bytes}`. `title` has at most 200 bytes; `max_body_bytes`, the largest request body accepted and payload kept, defaults to 65536 and is at most 524288. See [Receive webhooks](/extensions/server/#receive-webhooks). | `webhooks.receive` and a `server_wasm` artifact |
+| `secrets` | See [Secrets](#secrets). | `secrets.read` |
 
 Event handlers, commands, operations, and webhooks need a `server_wasm` artifact. `handler` is a name your component sees: commands receive it as `request.handler`, operations as `operation-id`. Event handlers don't receive it; see [Which handler was called](/extensions/server/#which-handler-was-called).
 
@@ -243,6 +244,26 @@ A connection kind describes a type of destination account. Administrators create
 | `token_header` | `Authorization: Bearer` | `{ "name", "prefix"? }`: the header that carries the access token, with an optional prefix. |
 | `client_authentication` | `body` | How the client authenticates to the token endpoint: `body` (`client_id` and `client_secret` as form fields) or `basic` (HTTP Basic). |
 | `parameters_schema` | | JSON Schema object for the connection's non-secret parameters. |
+
+### Secrets
+
+Declare the secrets an administrator should set, so the extension's **Secrets** tab can name and describe them and point out required ones that are missing:
+
+```json
+"secrets": [
+  { "name": "api-key", "title": "API key", "description": "Create one under Settings → API in your shop.", "required": true },
+  { "name": "sandbox-api-key", "title": "Sandbox API key" }
+]
+```
+
+| Field | Description |
+| --- | --- |
+| `name` | The name your component passes to `secrets.get.v1` or names in a mediated request. Letters, digits, `.`, `_` and `-`, up to 128 characters. Unique. |
+| `title` | At most 200 bytes. |
+| `description` | Optional. Where to find the value, at most 1000 bytes. |
+| `required` | Optional, default `false`. Whether the extension cannot do its work without it. |
+
+Up to 32 secrets. Your component can still read secrets it does not declare, such as one per webhook endpoint; an administrator adds those by name.
 
 ### Export destinations
 

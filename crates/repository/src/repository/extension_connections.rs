@@ -22,19 +22,17 @@ use super::{AttricatRepository, RepositoryError};
 
 static CREDENTIAL_KEY: OnceLock<[u8; 32]> = OnceLock::new();
 
-/// Installs the process-wide key that encrypts connection credentials
-/// (the `extension_credential_key` secret, 32 bytes). Later calls are ignored.
+/// Installs the process-wide key that encrypts connection credentials and
+/// extension secrets (the `extension_credential_key` secret, 32 bytes). Later calls are ignored.
 pub fn use_extension_credential_key(key: [u8; 32]) {
     let _ = CREDENTIAL_KEY.set(key);
 }
 
-fn credential_key() -> Result<&'static [u8; 32], RepositoryError> {
-    CREDENTIAL_KEY.get().ok_or_else(|| {
-        RepositoryError::InvalidExtension(
-            "extension connections need the extension_credential_key secret to be configured"
-                .into(),
-        )
-    })
+/// The key that encrypts connection credentials and extension secrets.
+pub(super) fn credential_key() -> Result<&'static [u8; 32], RepositoryError> {
+    CREDENTIAL_KEY
+        .get()
+        .ok_or(RepositoryError::ExtensionCredentialKeyMissing)
 }
 
 /// The additional data that binds a ciphertext to its connection and field.

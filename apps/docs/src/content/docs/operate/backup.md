@@ -18,7 +18,7 @@ The Attricat image contains no `pg_dump`, `pg_restore`, or S3 tools. Use version
 
 If your provider can take database and bucket snapshots at the same stopped point, use them instead.
 
-Keep credentials in your secret manager, not in commands, logs, or the manifest. Keep `identity_provider_credential_key` and `extension_credential_key` as long as the backups that need them: the database stores client secrets and connection credentials encrypted with those keys, so a restore without them means workspaces enter their identity provider secrets again and every extension connection is set up again.
+Keep credentials in your secret manager, not in commands, logs, or the manifest. Keep `identity_provider_credential_key` and `extension_credential_key` as long as the backups that need them: the database stores client secrets, connection credentials and extension secrets encrypted with those keys, so a restore without them means workspaces enter their identity provider secrets again and every extension connection and secret is set up again.
 
 ## Rehearse a restore
 

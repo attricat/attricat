@@ -1016,7 +1016,7 @@ impl HostState {
             valid_secret_name(&input.name)?;
             let value = self
                 .repository
-                .workspace_extension_secret_value(&input.name)
+                .extension_secret_value(&self.installation.extension_id, &input.name)
                 .await
                 .map_err(|_| "secret lookup failed")?
                 .ok_or_else(|| "secret reference is unavailable".to_owned())?;
@@ -1509,7 +1509,7 @@ impl HostState {
             }
             let secret = self
                 .repository
-                .workspace_extension_secret_value(&item.secret)
+                .extension_secret_value(&self.installation.extension_id, &item.secret)
                 .await
                 .map_err(|_| "secret lookup failed")?
                 .ok_or_else(|| "secret reference is unavailable".to_owned())?;
@@ -1832,7 +1832,7 @@ fn parse_host_request<T: for<'de> Deserialize<'de>>(
     serde_json::from_str(request).map_err(|_| format!("invalid {label}"))
 }
 fn valid_secret_name(name: &str) -> Result<(), String> {
-    if attricat_extension_manifest::extensions::valid_extension_secret_name(name) {
+    if crate::repository::valid_extension_secret_name(name) {
         Ok(())
     } else {
         Err("invalid secret reference".into())

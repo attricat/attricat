@@ -55,25 +55,27 @@ For the places every blueprint shares, such as navigation and panels, extensions
 
 ## Secrets
 
-Extensions that call external services often need an API key. Store it as a named workspace extension secret under **Manage → Extensions → Secrets**: **Add secret** asks for the name the extension's documentation gives and the value. Names use letters, digits, dots, hyphens and underscores, up to 128 characters.
+Extensions that call external services often need an API key or a signing key. Each secret belongs to one extension: open the extension under **Manage → Extensions** and its **Secrets** tab, which appears for extensions with the `secrets.read` permission. No other extension can read a secret you set there, even under the same name.
 
-Values are write-only: nobody can read them back, and an extension with `secrets.read` receives a value only while it runs. The list shows each name and when its value was last set. **Replace value** rotates a secret without renaming it, and deleting one makes the extensions that use it fail until you add it again.
+The tab lists the secrets the extension declares, with its description of each, and marks the required ones that are not set yet; the extension's overview warns about them too. **Set value** stores one. **Add secret** stores a secret under a name the extension does not declare, such as one its documentation asks for per webhook endpoint. Names use letters, digits, dots, hyphens and underscores, up to 128 characters.
+
+Values are write-only: nobody can read them back, and the extension receives a value only while it runs. Attricat stores them encrypted under the deployment's [`extension_credential_key`](/reference/configuration/#secrets), so secrets cannot be set without it. The list shows when each value was last set. **Replace value** rotates a secret without renaming it, and deleting one makes the extension fail wherever it needs it until you set it again. Removing the extension deletes its secrets.
 
 Automation can do the same through the API, with a token that can manage extensions:
 
 ```http
-PUT /workspace/extension-secrets/destination-token
+PUT /extensions/acme.shop/secrets/destination-token
 {"value": "…"}
 ```
 
-`GET /workspace/extension-secrets` lists names only, and `DELETE` removes a secret.
+`GET /extensions/acme.shop/secrets` lists the declared secrets and those set, by name only, and `DELETE` removes one.
 
 The [CLI](/reference/cli/#extensions) has the same commands. `set` reads the value from standard input, so it stays out of your shell history:
 
 ```sh
-acli extension secret list
-printf '%s' "$VALUE" | acli extension secret set destination-token --value-stdin
-acli extension secret delete destination-token
+acli extension secret list acme.shop
+printf '%s' "$VALUE" | acli extension secret set acme.shop destination-token --value-stdin
+acli extension secret delete acme.shop destination-token
 ```
 
 ## Connections

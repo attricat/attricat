@@ -123,6 +123,8 @@ pub enum RepositoryError {
     IdentityProviderNotEnabled,
     #[error("identity providers need identity_provider_credential_key to be configured correctly")]
     IdentityProviderKeyMissing,
+    #[error("extension connections and secrets need extension_credential_key to be configured")]
+    ExtensionCredentialKeyMissing,
     #[error("the context code 'default' is reserved")]
     ReservedContextCode,
     #[error("code must contain only ASCII letters, numbers, hyphens, and underscores")]

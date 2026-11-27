@@ -17,9 +17,8 @@ use crate::{
     extensions::{
         ActionCondition, ActionConfirmation, ActionInvocation, CellDeclaration,
         ContributionTranslation, ContributionView, EditorDeclaration, FORM_ASSIST_CAPABILITY,
-        MAX_EXTENSION_SECRET_VALUE_BYTES, Manifest, RECORD_FIELD_NOTES_CAPABILITY, RenderingMode,
-        SUPPORTED_HOST_API, UiContributionKind, UiOutlet, valid_contribution_key,
-        valid_extension_secret_name,
+        Manifest, RECORD_FIELD_NOTES_CAPABILITY, RenderingMode, SUPPORTED_HOST_API,
+        UiContributionKind, UiOutlet, valid_contribution_key,
     },
 };
 
@@ -377,15 +376,6 @@ pub struct ExtensionRuntimeInstallation {
     pub dev_server_revision: Option<String>,
 }
 
-/// Management projection; secret values intentionally have no serializable
-/// representation outside the repository/runtime call path.
-#[derive(Clone, Debug, FromRow)]
-pub struct WorkspaceExtensionSecret {
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
 /// Client-safe descriptor for an enabled contribution. It deliberately omits
 /// source identity, grants, server components, and secrets.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
@@ -525,87 +515,6 @@ impl AttricatRepository {
         .await?;
         transaction.commit().await?;
         Ok(())
-    }
-
-    /// Lists workspace extension secret names and timestamps, never values.
-    pub async fn workspace_extension_secrets(
-        &self,
-    ) -> Result<Vec<WorkspaceExtensionSecret>, RepositoryError> {
-        Ok(sqlx::query_as("SELECT name, created_at, updated_at FROM workspace_extension_secrets WHERE workspace_id = $1 ORDER BY name")
-            .bind(self.workspace_id()).fetch_all(&self.pool).await?)
-    }
-
-    /// Creates or rotates a workspace-owned secret. Its value is deliberately
-    /// never copied into an extension's manifest, configuration, task snapshot,
-    /// lifecycle record, or audit metadata.
-    pub async fn put_workspace_extension_secret(
-        &self,
-        name: &str,
-        value: &str,
-    ) -> Result<(), RepositoryError> {
-        // The runtime's own rule, so every secret saved can also be read.
-        if !valid_extension_secret_name(name)
-            || value.is_empty()
-            || value.len() > MAX_EXTENSION_SECRET_VALUE_BYTES
-        {
-            return Err(RepositoryError::InvalidExtension(
-                "invalid workspace extension secret".into(),
-            ));
-        }
-        let mut transaction = self.pool.begin().await?;
-        sqlx::query("INSERT INTO workspace_extension_secrets (id, workspace_id, name, value) VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id, name) DO UPDATE SET value = EXCLUDED.value, updated_at = clock_timestamp()")
-            .bind(Uuid::new_v4()).bind(self.workspace_id()).bind(name).bind(value).execute(&mut *transaction).await?;
-        self.with_workspace_audit_action(
-            "workspace.extension_secret.put",
-            json!({"type":"workspace_secret","name":name}),
-            json!({"name":name}),
-        )
-        .write_audit_event(&mut transaction)
-        .await?;
-        transaction.commit().await?;
-        Ok(())
-    }
-
-    pub async fn delete_workspace_extension_secret(
-        &self,
-        name: &str,
-    ) -> Result<bool, RepositoryError> {
-        let mut transaction = self.pool.begin().await?;
-        let deleted = sqlx::query(
-            "DELETE FROM workspace_extension_secrets WHERE workspace_id = $1 AND name = $2",
-        )
-        .bind(self.workspace_id())
-        .bind(name)
-        .execute(&mut *transaction)
-        .await?
-        .rows_affected()
-            > 0;
-        if deleted {
-            self.with_workspace_audit_action(
-                "workspace.extension_secret.delete",
-                json!({"type":"workspace_secret","name":name}),
-                json!({"name":name}),
-            )
-            .write_audit_event(&mut transaction)
-            .await?;
-        }
-        transaction.commit().await?;
-        Ok(deleted)
-    }
-
-    /// Internal-only value retrieval for a currently authorized invocation.
-    /// Do not expose this through a management response.
-    pub async fn workspace_extension_secret_value(
-        &self,
-        name: &str,
-    ) -> Result<Option<String>, RepositoryError> {
-        Ok(sqlx::query_scalar(
-            "SELECT value FROM workspace_extension_secrets WHERE workspace_id = $1 AND name = $2",
-        )
-        .bind(self.workspace_id())
-        .bind(name)
-        .fetch_optional(&self.pool)
-        .await?)
     }
 
     pub async fn installed_extensions(&self) -> Result<Vec<InstalledExtension>, RepositoryError> {
@@ -1952,11 +1861,12 @@ impl AttricatRepository {
             .await?;
         self.revoke_extension_file_links(&mut transaction, &current.extension_id)
             .await?;
-        // Credentials, operator budgets, handler outcomes, retry keys, webhook
+        // Credentials, secrets, operator budgets, handler outcomes, retry keys, webhook
         // endpoints and kept webhook payloads go with the installation, so a
         // later install of the same ID starts without them. Export mappings stay: they only name destination IDs.
         for table in [
             "extension_connections",
+            "extension_secrets",
             "extension_host_permission_budgets",
             "extension_handler_attempts",
             "extension_export_retry_requests",
