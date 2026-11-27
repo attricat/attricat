@@ -5,9 +5,8 @@ on:
   push:
     branches:
       - main
-    # Version tags rebuild, verify and publish the image as that release.
-    tags:
-      - 'v[0-9]+.[0-9]+.[0-9]+*'
+    # Version tags do not run CI: release-image.yml re-tags the image this
+    # workflow already verified and published for the tagged commit.
   workflow_dispatch:
 
 permissions:
@@ -188,9 +187,41 @@ jobs:
           path: apps/web/test-results/
           retention-days: 7
 
+  release-binaries:
+    # Compiles the image's release binaries while the checks run, with a cargo
+    # cache that persists between runs, so release-path only packs them.
+    # Compiling inside the image build started from nothing every time.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: 0
+      # Matches the image's own build settings. Cranelift is memory hungry,
+      # but three jobs fit the runner's 16 GB where the image build uses one.
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: 1
+      CARGO_BUILD_JOBS: 3
+      # What the API reports it was built from, as the image build passes it.
+      ATTRICAT_BUILD_COMMIT: ${{ github.sha }}
+      ATTRICAT_BUILD_BRANCH: ${{ github.head_ref || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked --release -p api --bins -p acli --bin acli
+      - run: |
+          mkdir -p release-binaries
+          cp target/release/api target/release/file-worker target/release/migrate target/release/acli release-binaries/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-binaries-${{ github.sha }}
+          path: release-binaries/
+          retention-days: 1
+          if-no-files-found: error
+
   release-path:
     # Publishing below must never outrun a failing check of the same commit.
-    needs: [rust-quality, rust-test, extension-scaffold, web, e2e]
+    needs: [rust-quality, rust-test, extension-scaffold, web, e2e, release-binaries]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     # Serialize release runs per ref so an older main build cannot move
@@ -211,9 +242,14 @@ jobs:
           bash -n scripts/docker-entrypoint.sh scripts/verify-deployment.sh
           docker compose -f deploy/compose.yml config >/dev/null
           docker compose -f deploy/compose.ci.yml config >/dev/null
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-binaries-${{ github.sha }}
+          path: release-binaries
       - name: Build and exercise release image and rollback
         env:
           ATTRICAT_IMAGE: attricat:ci
+          ATTRICAT_PREBUILT_BINARIES: release-binaries
         run: scripts/verify-deployment.sh
       - name: Publish commit and latest images
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -229,31 +265,6 @@ jobs:
           docker tag attricat:ci "$repository:latest"
           docker push "$repository:latest"
           docker image inspect --format 'published={{index .RepoDigests 0}}' "$target" | tee -a deployment-evidence/result.txt
-      - name: Publish release images
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-        env:
-          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          workspace_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
-          if [[ "$version" != "$workspace_version" ]]; then
-            echo "tag $GITHUB_REF_NAME does not match workspace version $workspace_version" >&2
-            exit 1
-          fi
-          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
-          repository="ghcr.io/${GITHUB_REPOSITORY,,}"
-          tags=("$version")
-          # Pre-releases get only their exact tag. Before 1.0 a minor release may
-          # break compatibility, so `0` would not be a meaningful channel.
-          if [[ "$version" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
-            tags+=("${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
-            [[ "${BASH_REMATCH[1]}" != 0 ]] && tags+=("${BASH_REMATCH[1]}")
-          fi
-          for tag in "${tags[@]}"; do
-            docker tag attricat:ci "$repository:$tag"
-            docker push "$repository:$tag"
-          done
-          docker image inspect --format 'published={{index .RepoDigests 0}}' "$repository:$version" | tee -a deployment-evidence/result.txt
       - name: Upload deployment evidence
         if: always()
         uses: actions/upload-artifact@v4

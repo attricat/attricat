@@ -1,4 +1,9 @@
 # syntax=docker/dockerfile:1.7
+# Where the Rust binaries come from: `rust-builder` compiles them here, and
+# `prebuilt` takes them from the `prebuilt-binaries` build context, which CI
+# compiles outside the image where its cargo cache persists between runs.
+ARG RUST_BINARIES=rust-builder
+
 FROM node:26-trixie-slim AS web-builder
 ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm install --global pnpm@11.25.0
@@ -50,6 +55,13 @@ RUN --mount=type=cache,id=attricat-cargo-registry,target=/usr/local/cargo/regist
  && mkdir -p /out \
  && cp target/release/api target/release/file-worker target/release/migrate target/release/acli /out/
 
+FROM scratch AS prebuilt
+COPY --from=prebuilt-binaries --chmod=0755 api file-worker migrate acli /out/
+
+# BuildKit builds only the stage this names, so a prebuilt image never
+# compiles Rust and a local build never needs the prebuilt context.
+FROM ${RUST_BINARIES} AS binaries
+
 FROM debian:trixie-slim AS runtime
 ARG VCS_REF=unknown
 ARG VERSION=dev
@@ -64,11 +76,11 @@ RUN apt-get update \
  && groupadd --system --gid 10001 attricat \
  && useradd --system --uid 10001 --gid attricat --home /srv/attricat attricat
 WORKDIR /srv/attricat
-COPY --from=rust-builder /out/api /usr/local/bin/attricat-api
-COPY --from=rust-builder /out/file-worker /usr/local/bin/attricat-file-worker
-COPY --from=rust-builder /out/migrate /usr/local/bin/attricat-migrate
-COPY --from=rust-builder /out/acli /usr/local/bin/acli
-COPY --from=rust-builder /tmp/web-dist /srv/attricat/web
+COPY --from=binaries /out/api /usr/local/bin/attricat-api
+COPY --from=binaries /out/file-worker /usr/local/bin/attricat-file-worker
+COPY --from=binaries /out/migrate /usr/local/bin/attricat-migrate
+COPY --from=binaries /out/acli /usr/local/bin/acli
+COPY --from=web-builder /src/apps/web/dist /srv/attricat/web
 COPY scripts/docker-entrypoint.sh /usr/local/bin/
 RUN chmod 0555 /usr/local/bin/docker-entrypoint.sh \
  && mkdir -p /var/tmp/attricat \

@@ -24,7 +24,14 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ "${SKIP_IMAGE_BUILD:-false}" != "true" ]]; then
-  docker build --build-arg VCS_REF="$(git rev-parse HEAD)" --build-arg VCS_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}}" --build-arg VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)" -t "$image" .
+  # ATTRICAT_PREBUILT_BINARIES names a directory holding release builds of
+  # api, file-worker, migrate and acli, which the image then packs instead of
+  # compiling them; CI builds them where its cargo cache persists.
+  prebuilt=()
+  if [[ -n "${ATTRICAT_PREBUILT_BINARIES:-}" ]]; then
+    prebuilt=(--build-arg RUST_BINARIES=prebuilt --build-context "prebuilt-binaries=$ATTRICAT_PREBUILT_BINARIES")
+  fi
+  docker build ${prebuilt[@]+"${prebuilt[@]}"} --build-arg VCS_REF="$(git rev-parse HEAD)" --build-arg VCS_BRANCH="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD)}}" --build-arg VERSION="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)" -t "$image" .
 fi
 export ATTRICAT_IMAGE="$image"
 

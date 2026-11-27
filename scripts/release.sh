@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Bump the workspace version, commit it and push a `vX.Y.Z` tag. The tag starts
-# the release: CI publishes the versioned container image and release.yml
-# (cargo-dist) builds the standalone `acli` binaries and the GitHub Release.
+# the release: release-image.yml tags the image CI verified for that commit, and
+# release.yml (cargo-dist) builds the standalone `acli` binaries and the GitHub
+# Release.
 #
 # Usage: scripts/release.sh major|minor|patch|X.Y.Z[-pre]
 set -euo pipefail
@@ -70,4 +71,4 @@ cargo update --workspace --offline --quiet
 git commit --quiet -m "Release $tag" -- Cargo.toml Cargo.lock
 git tag -a "$tag" -m "Release $tag"
 git push --atomic origin main "$tag"
-echo "Pushed $tag. CI publishes the image; release.yml publishes acli and the GitHub Release."
+echo "Pushed $tag. Once CI on main verifies this commit, release-image.yml tags its image; release.yml publishes acli and the GitHub Release."

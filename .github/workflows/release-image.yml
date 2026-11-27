@@ -1,0 +1,80 @@
+# Publishes a version tag's container image without building it again. CI on
+# `main` builds, verifies and publishes `ghcr.io/attricat/attricat:<commit>` for
+# every commit; this waits for the tagged commit's image, checks that it is
+# that release, and adds the release tags to the same digest.
+#
+# scripts/release.sh pushes the version commit and its tag together, so the
+# image usually appears once that commit's CI run finishes.
+name: Release image
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # Covers the tagged commit's full CI run plus the wait for a runner.
+    timeout-minutes: 90
+    env:
+      GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Seconds between checks for the commit's image, and how many checks.
+      POLL_SECONDS: 30
+      POLL_ATTEMPTS: 160
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check that the tag matches the workspace version
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          workspace_version="$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)"
+          if [[ "$version" != "$workspace_version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match workspace version $workspace_version" >&2
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          echo "REPOSITORY=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: Wait for the image CI verified for this commit
+        run: |
+          echo "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+          # CI publishes the commit tag only after every check and the
+          # deployment exercise passed for this exact commit.
+          for ((attempt = 1; attempt <= POLL_ATTEMPTS; attempt++)); do
+            if docker manifest inspect "$REPOSITORY:$GITHUB_SHA" >/dev/null 2>&1; then
+              exit 0
+            fi
+            echo "Waiting for $REPOSITORY:$GITHUB_SHA ($attempt/$POLL_ATTEMPTS)"
+            sleep "$POLL_SECONDS"
+          done
+          echo "CI never published $REPOSITORY:$GITHUB_SHA; check the commit's CI run on main" >&2
+          exit 1
+      - name: Check that the image is this release
+        run: |
+          docker pull "$REPOSITORY:$GITHUB_SHA"
+          label() {
+            docker image inspect --format "{{ index .Config.Labels \"$1\" }}" "$REPOSITORY:$GITHUB_SHA"
+          }
+          revision="$(label org.opencontainers.image.revision)"
+          image_version="$(label org.opencontainers.image.version)"
+          if [[ "$revision" != "$GITHUB_SHA" || "$image_version" != "$VERSION" ]]; then
+            echo "image is $image_version at $revision, expected $VERSION at $GITHUB_SHA" >&2
+            exit 1
+          fi
+      - name: Publish release tags
+        run: |
+          tags=("$VERSION")
+          # Pre-releases get only their exact tag. Before 1.0 a minor release may
+          # break compatibility, so `0` would not be a meaningful channel.
+          if [[ "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+$ ]]; then
+            tags+=("${BASH_REMATCH[1]}.${BASH_REMATCH[2]}")
+            [[ "${BASH_REMATCH[1]}" != 0 ]] && tags+=("${BASH_REMATCH[1]}")
+          fi
+          for tag in "${tags[@]}"; do
+            docker tag "$REPOSITORY:$GITHUB_SHA" "$REPOSITORY:$tag"
+            docker push "$REPOSITORY:$tag"
+          done
+          docker image inspect --format 'published={{index .RepoDigests 0}}' "$REPOSITORY:$VERSION"
