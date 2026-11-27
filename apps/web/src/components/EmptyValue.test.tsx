@@ -17,8 +17,12 @@ describe('EmptyValue', () => {
   it('names the dash on hover', async () => {
     const user = userEvent.setup();
     render(<EmptyValue />);
+    const dash = screen.getByText('—').parentElement!;
+    // Only the hidden label names it, so it is announced once.
+    expect(dash.hasAttribute('title')).toBe(false);
     await user.hover(screen.getByText('—'));
     expect((await screen.findByRole('tooltip')).textContent).toBe('Not set');
+    expect(dash.hasAttribute('aria-describedby')).toBe(false);
   });
 
   it('says what is missing when given a label', async () => {

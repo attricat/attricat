@@ -14,9 +14,13 @@ export const EmptyValue = ({ label: override }: { label?: string } = {}) => {
   const { t } = useTranslation();
   const label = override ?? t('views.notSet');
   return (
-    // The hidden label already names it, so the tooltip only describes.
+    // The hidden label already names it. Tooltip would also set `title`, or
+    // `aria-describedby` while open, which some screen readers announce on
+    // top of the label; the child's own props override both.
     <Tooltip describeChild title={label}>
       <Typography
+        aria-describedby={undefined}
+        title={undefined}
         color="text.secondary"
         component="span"
         // Matches the text around it; a wider target than the dash alone that keeps its place in the layout.
