@@ -13,13 +13,27 @@ import {
 } from '@mui/material';
 import ReactMarkdown from 'react-markdown';
 import { useTranslation } from 'react-i18next';
-import { PackagePlusIcon } from 'lucide-react';
+import { CircleArrowUpIcon, PackagePlusIcon } from 'lucide-react';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
 import { useCan } from '../auth/useCan';
-import { installExtension, registryDetails } from './managementApi';
+import {
+  installExtension,
+  installedExtensions,
+  registryDetails,
+} from './managementApi';
 import { extensionManagementQueryKeys } from './managementQueryKeys';
-import { invalidateExtensions } from './extensionPageUtils';
+import {
+  installedExtensionName,
+  invalidateExtensions,
+  sourceRepository,
+} from './extensionPageUtils';
+import {
+  ExtensionUpgradeDialog,
+  type PendingExtensionUpgrade,
+} from './ExtensionUpgradeDialog';
+import { useExtensionUpdates } from './useExtensionUpdates';
+import { RouterButton } from '../../components/RouterLink';
 import { ExtensionIcon } from '../../components/systemIcons';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -46,6 +60,19 @@ export const MarketplaceExtensionPage = ({
     onSuccess: () => invalidateExtensions(client),
   });
   const canManage = useCan(capabilities.extensionsManage);
+  const installed = useQuery({
+    queryKey: extensionManagementQueryKeys.installed(),
+    queryFn: installedExtensions,
+  });
+  // Installing it again would fail: an installed extension is upgraded.
+  const installation = installed.data?.find(
+    (candidate) =>
+      sourceRepository(candidate.source) === details.data?.extension.repository,
+  );
+  const update = useExtensionUpdates().find(
+    (candidate) => candidate.extension_id === installation?.extension_id,
+  );
+  const [upgrade, setUpgrade] = useState<PendingExtensionUpgrade | null>(null);
   const [selectedReleaseId, setSelectedReleaseId] = useState<number>();
   const releases = details.data?.releases ?? [];
   const selectedRelease =
@@ -61,7 +88,11 @@ export const MarketplaceExtensionPage = ({
         description={
           details.data?.extension.description ?? t('extensions.loadingDetails')
         }
-        actions={<Link to="/manage/extensions">{t('extensions.back')}</Link>}
+        actions={
+          <Link to="/manage/extensions/marketplace">
+            {t('extensions.backToMarketplace')}
+          </Link>
+        }
       />
       <ApiErrorAlert error={details.error} sx={{ mb: 2 }} />
       <ApiErrorAlert error={install.error} sx={{ mb: 2 }} />
@@ -73,7 +104,50 @@ export const MarketplaceExtensionPage = ({
                 origin: details.data.extension.registry_source,
               })}
             </Typography>
-            {selectedRelease ? (
+            {installation ? (
+              <Alert
+                action={
+                  <Stack direction="row" spacing={1}>
+                    <RouterButton
+                      color="inherit"
+                      params={{ extensionId: installation.extension_id }}
+                      to="/manage/extensions/$extensionId"
+                    >
+                      {t('extensions.manage')}
+                    </RouterButton>
+                    {update && canManage && (
+                      <Button
+                        onClick={() =>
+                          setUpgrade({
+                            extensionId: installation.extension_id,
+                            extensionName: installedExtensionName(installation),
+                            installedVersion: installation.version,
+                            owner,
+                            repository,
+                            version: update.latest_version,
+                          })
+                        }
+                        startIcon={<CircleArrowUpIcon />}
+                        variant="contained"
+                      >
+                        {t('extensions.update')}
+                      </Button>
+                    )}
+                  </Stack>
+                }
+                severity={update ? 'info' : 'success'}
+                sx={{ mt: 2 }}
+              >
+                {update
+                  ? t('extensions.installedWithUpdate', {
+                      installed: installation.version,
+                      latest: update.latest_version,
+                    })
+                  : t('extensions.installedVersion', {
+                      version: installation.version,
+                    })}
+              </Alert>
+            ) : selectedRelease ? (
               <Stack
                 direction={{ xs: 'column', sm: 'row' }}
                 spacing={2}
@@ -130,6 +204,10 @@ export const MarketplaceExtensionPage = ({
           </Paper>
         </>
       )}
+      <ExtensionUpgradeDialog
+        onClose={() => setUpgrade(null)}
+        upgrade={upgrade}
+      />
     </PageContainer>
   );
 };

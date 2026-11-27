@@ -11,6 +11,6 @@ export const Route = createFileRoute('/manage/extensions/')({
   beforeLoad: ({ search }) => {
     if (search.authorization)
       showBrowserAuthorizationNotice(search.authorization);
-    throw redirect({ to: '/manage/extensions/marketplace' });
+    throw redirect({ to: '/manage/extensions/installed' });
   },
 });

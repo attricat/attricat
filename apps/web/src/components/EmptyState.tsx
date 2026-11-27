@@ -3,6 +3,8 @@ import type { LucideIcon } from 'lucide-react';
 import type { ElementType, ReactNode } from 'react';
 
 type Props = {
+  /** The one next step that fills it, such as a button to add the first item. */
+  action?: ReactNode;
   description?: ReactNode;
   /** The icon of the system concept that is missing. */
   icon: LucideIcon;
@@ -13,10 +15,11 @@ type Props = {
 
 /**
  * What a list or section is missing: a quiet concept icon, a short title and,
- * optionally, why it matters. Render it inside the surface that would hold the
+ * optionally, why it matters and the one next action. Render it inside the surface that would hold the
  * items, such as a Paper, a list, or a full-width table cell.
  */
 export const EmptyState = ({
+  action,
   description,
   icon: Icon,
   title,
@@ -34,5 +37,6 @@ export const EmptyState = ({
         {description}
       </Typography>
     )}
+    {action && <Box sx={{ mt: 3 }}>{action}</Box>}
   </Box>
 );

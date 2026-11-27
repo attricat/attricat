@@ -422,3 +422,4 @@ export { detailSchema };
 export type ExtensionInstallation = z.infer<typeof installationSchema>;
 export type ExtensionDetail = z.infer<typeof detailSchema>;
 export type ExtensionUpdate = z.infer<typeof extensionUpdateSchema>;
+export type DiscoveredRelease = z.infer<typeof releaseSchema>;

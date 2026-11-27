@@ -165,6 +165,8 @@ export const installedExtensionTabs = {
 export type InstalledExtensionTab =
   (typeof installedExtensionTabs)[keyof typeof installedExtensionTabs];
 export const githubRepositoryPrefix = /^github:/;
+/** The optional prefix before the version a release tag names, as in `v1.2.0`. */
+export const releaseTagVersionPrefix = /^v/;
 export const releaseTagSeparator = '@';
 
 /** Capabilities a contribution must hold before the host brokers a request. */
@@ -300,8 +302,8 @@ export const extensionFrameSkeletonLines = [
 ] as const;
 
 export const extensionManagementTabIndex = {
-  marketplace: 0,
-  installed: 1,
+  installed: 0,
+  marketplace: 1,
   layout: 2,
   secrets: 3,
 } as const;

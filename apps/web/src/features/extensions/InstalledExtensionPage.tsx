@@ -14,18 +14,20 @@ import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { compactIconSize } from '../../components/iconSizes';
 import { PageContainer } from '../../components/PageContainer';
 import { PageHeader } from '../../components/PageHeader';
-import { RouterButton, RouterTab } from '../../components/RouterLink';
+import {
+  RouterButton,
+  RouterLink,
+  RouterTab,
+} from '../../components/RouterLink';
 import { useTabAccessibility } from '../../components/useTabAccessibility';
 import { useCan } from '../auth/useCan';
 import {
   extensionDetail,
   lifecycleExtension,
   removeExtension,
-  upgradeExtension,
   upgradeExtensionFromArchive,
   type ExtensionDetail,
   type ExtensionLifecycleAction,
-  type ExtensionReleaseReference,
 } from './managementApi';
 import {
   installedExtensionTabs,
@@ -37,13 +39,20 @@ import {
   installedExtensionDescription,
   installedExtensionName,
   invalidateExtensions,
+  marketplaceRepository,
 } from './extensionPageUtils';
 import { ExtensionConfigurationSection } from './ExtensionConfigurationSection';
 import { ExtensionDetailsSection } from './ExtensionDetailsSection';
 import { ExtensionInstallationActions } from './ExtensionInstallationActions';
 import { ExtensionLifecycleSection } from './ExtensionLifecycleSection';
 import { ExtensionPermissionsSection } from './ExtensionPermissionsSection';
+import { ExtensionUpdateChip } from './ExtensionUpdateChip';
+import {
+  ExtensionUpgradeDialog,
+  type PendingExtensionUpgrade,
+} from './ExtensionUpgradeDialog';
 import { ExtensionUpgradeSection } from './ExtensionUpgradeSection';
+import { useExtensionUpdates } from './useExtensionUpdates';
 import {
   ExportIcon,
   ExtensionConnectionIcon,
@@ -74,7 +83,6 @@ const tabIcons = {
 type InstallationAction =
   | { action: ExtensionLifecycleAction }
   | { action: 'remove' }
-  | { action: 'upgrade'; release: ExtensionReleaseReference }
   | { action: 'upgradeArchive'; archive: File };
 
 const runInstallationAction = (
@@ -84,8 +92,6 @@ const runInstallationAction = (
   switch (input.action) {
     case 'remove':
       return removeExtension(extensionId);
-    case 'upgrade':
-      return upgradeExtension(extensionId, input.release);
     case 'upgradeArchive':
       return upgradeExtensionFromArchive(extensionId, input.archive);
     default:
@@ -112,7 +118,7 @@ const InstalledExtensionTabs = ({
   detail: ExtensionDetail;
   extensionId: string;
   onChanged: () => void;
-  onUpgrade: (release: ExtensionReleaseReference, name: string) => void;
+  onUpgrade: (version: string) => void;
 }) => {
   const { t } = useTranslation();
   const tabId = useTabAccessibility();
@@ -148,13 +154,13 @@ const InstalledExtensionTabs = ({
               {t('extensions.pendingPermissions', { count: pending })}
             </Alert>
           )}
-          <ExtensionDetailsSection installation={installation} />
           <ExtensionUpgradeSection
             busy={busy}
             canManage={canManage}
             installation={installation}
             onUpgrade={onUpgrade}
           />
+          <ExtensionDetailsSection installation={installation} />
         </Stack>
       ),
     },
@@ -305,16 +311,17 @@ export const InstalledExtensionPage = ({
   // Waiting for the person to confirm upgrading from this archive.
   const [archive, setArchive] = useState<File | null>(null);
   // Waiting for the person to confirm upgrading to this registry release.
-  const [upgrade, setUpgrade] = useState<{
-    name: string;
-    release: ExtensionReleaseReference;
-  } | null>(null);
+  const [upgrade, setUpgrade] = useState<PendingExtensionUpgrade | null>(null);
+  const updates = useExtensionUpdates();
   const [removeOpen, setRemoveOpen] = useState(false);
   const closeArchiveDialog = () => {
     setArchive(null);
     action.reset();
   };
   const installation = detail.data?.installation;
+  const marketplace = installation
+    ? marketplaceRepository(installation.source)
+    : undefined;
   return (
     <PageContainer>
       <RouterButton
@@ -362,14 +369,28 @@ export const InstalledExtensionPage = ({
       {installation && (
         <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mt: 1 }}>
           <InstallationStateChip state={installation.state} />
+          <ExtensionUpdateChip
+            update={updates.find(
+              (update) => update.extension_id === installation.extension_id,
+            )}
+          />
           <Typography color="text.secondary" variant="body2">
             {t('extensions.versionLabel', { version: installation.version })}
           </Typography>
+          {marketplace && (
+            <RouterLink
+              params={marketplace}
+              to="/manage/extensions/$owner/$repository"
+              variant="body2"
+            >
+              {t('extensions.viewInMarketplace')}
+            </RouterLink>
+          )}
         </Stack>
       )}
       <ApiErrorAlert error={detail.error} sx={{ mt: 2 }} />
       <ApiErrorAlert
-        error={archive || upgrade || removeOpen ? null : action.error}
+        error={archive || removeOpen ? null : action.error}
         sx={{ mt: 2 }}
       />
       {detail.data && (
@@ -380,33 +401,22 @@ export const InstalledExtensionPage = ({
           detail={detail.data}
           extensionId={extensionId}
           onChanged={() => invalidateExtensions(client)}
-          onUpgrade={(release, name) => {
-            action.reset();
-            setUpgrade({ name, release });
+          onUpgrade={(version) => {
+            if (marketplace)
+              setUpgrade({
+                ...marketplace,
+                extensionId,
+                extensionName: installedExtensionName(detail.data.installation),
+                installedVersion: detail.data.installation.version,
+                version,
+              });
           }}
         />
       )}
-      <ConfirmDialog
-        confirmLabel={t('extensions.upgrade')}
-        error={action.error}
-        isPending={action.isPending}
-        onClose={() => {
-          setUpgrade(null);
-          action.reset();
-        }}
-        onConfirm={() => {
-          if (upgrade)
-            action.mutate(
-              { action: 'upgrade', release: upgrade.release },
-              { onSuccess: () => setUpgrade(null) },
-            );
-        }}
-        open={upgrade !== null}
-        title={t('extensions.upgradeToRelease')}
-      >
-        {t('extensions.upgradeReleaseQuestion', { name: upgrade?.name })}{' '}
-        {t('extensions.upgradeEffect')}
-      </ConfirmDialog>
+      <ExtensionUpgradeDialog
+        onClose={() => setUpgrade(null)}
+        upgrade={upgrade}
+      />
       <ConfirmDialog
         confirmLabel={t('extensions.upgrade')}
         error={action.error}

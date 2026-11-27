@@ -13,7 +13,11 @@ import {
 } from './schemas';
 import { extensionsApiPath, extensionPath } from './apiPaths';
 
-export type { ExtensionDetail, ExtensionInstallation } from './schemas';
+export type {
+  DiscoveredRelease,
+  ExtensionDetail,
+  ExtensionInstallation,
+} from './schemas';
 
 export const discoverExtensions = () =>
   request('/api/extension-registries/discover', z.array(discoveredSchema));
