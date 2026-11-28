@@ -406,6 +406,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "attricat-command-test-component"
+version = "1.13.0"
+dependencies = [
+ "serde_json",
+ "wit-bindgen 0.63.0",
+]
+
+[[package]]
 name = "attricat-document-text"
 version = "1.13.0"
 dependencies = [

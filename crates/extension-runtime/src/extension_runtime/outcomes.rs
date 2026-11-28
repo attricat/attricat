@@ -100,6 +100,31 @@ impl InvocationFailure {
     }
 }
 
+/// The code of a rejection whose component gave none, or an unusable one.
+const DEFAULT_REJECTION_CODE: &str = "rejected";
+
+/// A 1.3 command's refusal, for the person who invoked the command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CommandRejection {
+    pub code: String,
+    pub message: String,
+}
+
+impl CommandRejection {
+    /// Bounds a component's rejection like any other outcome it reports.
+    pub(super) fn new(code: &str, message: &str) -> Self {
+        let code = bounded_text(code, MAX_REJECTION_CODE_BYTES);
+        Self {
+            code: if is_identifier(&code) {
+                code
+            } else {
+                DEFAULT_REJECTION_CODE.into()
+            },
+            message: bounded_text(message, MAX_OUTCOME_MESSAGE_BYTES),
+        }
+    }
+}
+
 /// Truncates component text at a character boundary.
 pub(super) fn bounded_text(value: &str, max_bytes: usize) -> String {
     value[..value.floor_char_boundary(max_bytes)].to_owned()
@@ -117,7 +142,7 @@ impl From<wit::Failure> for InvocationFailure {
                 let code = bounded_text(&rejection.code, MAX_REJECTION_CODE_BYTES);
                 Self::Rejected(Rejection {
                     code: if code.is_empty() {
-                        "rejected".into()
+                        DEFAULT_REJECTION_CODE.into()
                     } else {
                         code
                     },
@@ -209,6 +234,28 @@ mod tests {
             r#"{"version":2,"rejection_code":"template_changed"}"#
         );
         assert_eq!(rejection("token=secret value", "").diagnostic(), "{}");
+    }
+
+    #[test]
+    fn command_rejections_are_bounded_and_keep_a_usable_code() {
+        assert_eq!(
+            CommandRejection::new("client_rejected", "NIP is invalid"),
+            CommandRejection {
+                code: "client_rejected".into(),
+                message: "NIP is invalid".into()
+            }
+        );
+        assert_eq!(
+            CommandRejection::new("token=abc", "x").code,
+            DEFAULT_REJECTION_CODE
+        );
+        assert_eq!(CommandRejection::new("", "x").code, DEFAULT_REJECTION_CODE);
+        assert_eq!(
+            CommandRejection::new("c", &"é".repeat(MAX_OUTCOME_MESSAGE_BYTES))
+                .message
+                .len(),
+            MAX_OUTCOME_MESSAGE_BYTES
+        );
     }
 
     #[test]

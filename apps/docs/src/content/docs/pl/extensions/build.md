@@ -130,7 +130,7 @@ Attricat nigdy nie instaluje wydania, którego zakres `host_api` nie obejmuje dz
 
 Artefakt serwerowy to komponent WebAssembly, który importuje wyłącznie interfejsy `attricat:host`. Nadaje się każdy język, który potrafi tworzyć komponenty; poniższe przykłady używają Rusta i [`wit-bindgen`](https://github.com/bytecodealliance/wit-bindgen).
 
-1. Skopiuj plik `wit/attricat-host-1.2.0.wit` z repozytorium [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) do katalogu `wit/` swojego pakietu. Repozytorium zawiera każdą wydaną wersję ABI; nigdy nie używaj niewydanej kopii.
+1. Skopiuj plik `wit/attricat-host-1.3.0.wit` z repozytorium [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) do katalogu `wit/` swojego pakietu. Repozytorium zawiera każdą wydaną wersję ABI; nigdy nie używaj niewydanej kopii.
 2. Wygeneruj powiązania dla [świata](/pl/extensions/server/#wersja-api-hosta) i zaimplementuj jego eksporty:
 
    ```rust

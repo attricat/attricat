@@ -7,7 +7,7 @@ Serwerowy kod rozszerzenia to **komponent** WebAssembly zadeklarowany jako artef
 
 ## Wersja API hosta
 
-Interfejs hosta to pakiet WIT `attricat:host@1.2.0`, opublikowany jako `wit/attricat-host-1.2.0.wit` w repozytorium [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) razem z każdą inną wydaną wersją. Ustaw `attricat.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"`, `"^1.1"` lub `"^1.2"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/), [webhooków przychodzących](#odbieraj-webhooki) i wszystkich miejsc osadzenia po stronie klienta. Jeśli komponent korzysta z czegokolwiek, co dodano w 1.1 lub 1.2, zadeklaruj `"^1.1"` lub `"^1.2"`, aby starszy host odrzucił pakiet, zamiast zawieść w czasie działania.
+Interfejs hosta to pakiet WIT `attricat:host@1.3.0`, opublikowany jako `wit/attricat-host-1.3.0.wit` w repozytorium [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) razem z każdą inną wydaną wersją. Ustaw `attricat.host_api` w manifeście na zakres, który go obejmuje, np. `">=1.0.0, <2.0.0"`, `"^1.1"`, `"^1.2"` lub `"^1.3"`. Każde wydanie z takim zakresem może używać wszystkich funkcji: procedur obsługi zdarzeń, poleceń, typowanego odczytu i zapisu, konfiguracji zakresowej, wszystkich rodzajów [operacji](/pl/extensions/operations/), [webhooków przychodzących](#odbieraj-webhooki) i wszystkich miejsc osadzenia po stronie klienta. Jeśli komponent korzysta z czegokolwiek, co dodano w 1.1, 1.2 lub 1.3, zadeklaruj `"^1.1"`, `"^1.2"` lub `"^1.3"`, aby starszy host odrzucił pakiet, zamiast zawieść w czasie działania.
 
 Zbuduj komponent dla jednego z tych światów:
 
@@ -18,6 +18,7 @@ Zbuduj komponent dla jednego z tych światów:
 | `operation-extension` | `operations` |
 | `outcome-extension` (1.1) | `event-handler`, `command-handler` i `deferrable-operations` |
 | `webhook-extension` (1.2) | wszystko, co eksportuje `outcome-extension`, oraz `webhook-receiver` |
+| `command-extension` (1.3) | wszystko, co eksportuje `webhook-extension`, z `commands` zamiast `command-handler` |
 
 `outcome-extension` eksportuje interfejsy z wersji 1.1, które zgłaszają [typowane wyniki](#typowane-wyniki) zamiast zwykłego błędu. Gdy komponent eksportuje interfejs z 1.1, host wywołuje go zamiast jego poprzednika z 1.0. Komponent, który potrzebuje tylko części eksportów, zwraca z pozostałych błąd `fault`. Buduj dla `webhook-extension` tylko wtedy, gdy rozszerzenie [odbiera webhooki](#odbieraj-webhooki).
 
@@ -113,7 +114,7 @@ Zdarzenie czeka, aż jego rekord przez `debounce_ms` (do godziny) nie będzie si
 
 Pułapki, wyczerpanie paliwa lub pamięci i przekroczenie limitu czasu są traktowane jak `fault`. Wyniki są zapisywane osobno dla każdego zdarzenia i procedury obsługi, więc gdy ponawiana jest jedna procedura obsługi zdarzenia, te, które już się zakończyły, nie są wywoływane ponownie. Odrzucone i wyczerpane dostarczenia są widoczne na stronie zarządzania rozszerzeniem przez 30 dni albo do wygaśnięcia ich zdarzenia zgodnie z `DOMAIN_EVENT_RETENTION_DAYS`, jeśli nastąpi to wcześniej.
 
-`command-handler` eksportuje `handle-command` dla [poleceń](#polecenia-dla-twojego-interfejsu), oddzielnie od obsługi zdarzeń.
+`command-handler` eksportuje `handle-command` dla [poleceń](#polecenia-dla-twojego-interfejsu), oddzielnie od obsługi zdarzeń. Od wersji 1.3 eksportuje ją także `commands`, z typowaną odmową; zobacz [Odmowa wykonania polecenia](#odmowa-wykonania-polecenia).
 
 ## Zegar
 
@@ -196,7 +197,13 @@ Polecenia serwerowe pozwalają komponentowi klienckiemu rozszerzenia poprosić j
 }]
 ```
 
-Klient wywołuje `attricat.command({ command_id: 'recalculate', payload: { record_id } })`. Attricat waliduje ładunek względem `request_schema`, sprawdza sesję wywołującego, kontrybucję, wydanie i uprawnienia, a następnie wywołuje `handle-command` z `handler: "recalculate"` i ładunkiem jako tekstem JSON. Zwróć odpowiedź jako tekst JSON; przed przekazaniem do klienta jest walidowana względem `response_schema`. Zwrócony błąd nie obejmuje rozszerzenia kwarantanną, ale obietnica po stronie klienta jest odrzucana z ogólnym komunikatem `extension command failed`. Treść Twojego błędu nie jest przekazywana, więc problemy, które użytkownik powinien zobaczyć, np. nieprawidłowe dane, zgłaszaj w odpowiedzi.
+Klient wywołuje `attricat.command({ command_id: 'recalculate', payload: { record_id } })`. Attricat waliduje ładunek względem `request_schema`, sprawdza sesję wywołującego, kontrybucję, wydanie i uprawnienia, a następnie wywołuje `handle-command` z `handler: "recalculate"` i ładunkiem jako tekstem JSON. Zwróć odpowiedź jako tekst JSON; przed przekazaniem do klienta jest walidowana względem `response_schema`. Zwrócony błąd nie obejmuje rozszerzenia kwarantanną, ale obietnica po stronie klienta jest odrzucana z ogólnym komunikatem `extension command failed`. Treść Twojego błędu nie jest przekazywana, więc problemy, które użytkownik powinien zobaczyć, np. nieprawidłowe dane, zgłaszaj w odpowiedzi albo odmów wykonania polecenia, jak opisano niżej.
+
+### Odmowa wykonania polecenia
+
+Komponent zbudowany dla świata 1.3 `command-extension` obsługuje polecenia przez `commands`. Jego żądanie zawiera też `locale`, czyli język osoby, która wywołała polecenie, np. `pl` (pusty, gdy nie jest znany). Aby odmówić z wyjaśnieniem, zwróć `rejected { code, message }`: `code` to identyfikator snake_case dla programów, a `message` jest dla człowieka, więc w miarę możliwości napisz go w języku `locale`.
+
+Host odpowiada `422 extension_command_rejected` ze szczegółami `details { extension_id, rejection_code, reason }`, a akcja renderowana przez hosta pokazuje `reason` bez zmian w powiadomieniu o błędzie. Odmowa nigdy nie obejmuje rozszerzenia kwarantanną. Na `fault`, pułapkę lub przekroczenie czasu host nadal odpowiada ogólnym `extension command failed`, bez Twojego tekstu. Obietnica `attricat.command` w ramce jest w obu przypadkach odrzucana bez powodu, więc interfejs w ramce, który ma wyjaśnić odmowę, zgłasza ją w odpowiedzi.
 
 Polecenie działa z uprawnieniami rozszerzenia, a nie użytkownika. Sprawdź w procedurze obsługi, czy działanie ma sens dla wskazanego rekordu.
 

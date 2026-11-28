@@ -335,6 +335,7 @@ async fn brokered_requests_carry_host_managed_credentials_only(pool: sqlx::PgPoo
                     repository,
                     "call",
                     &json!({"operation": operation, "request": request}).to_string(),
+                    "",
                     65536,
                 )
                 .await
@@ -851,6 +852,7 @@ attributes:
                     "file_id": file_id, "record_id": record_id, "expires_in_seconds": 7200
                 }})
                 .to_string(),
+                "",
                 65536,
             )
             .await
@@ -984,6 +986,7 @@ attributes:
                     "file_id": file_id, "record_id": record_id, "expires_in_seconds": 7200
                 }})
                 .to_string(),
+                "",
                 65536,
             )
             .await
@@ -1143,6 +1146,7 @@ async fn a_response_too_large_to_return_is_uncertain_not_an_error(pool: sqlx::Pg
             repository,
             "call",
             &request.to_string(),
+            "",
             65536,
         )
         .await

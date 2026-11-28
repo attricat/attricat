@@ -1,4 +1,4 @@
-//! Host implementation of the `attricat:host` ABI, currently 1.2.0.
+//! Host implementation of the `attricat:host` ABI, currently 1.3.0.
 //!
 //! Every import is linked for every invocation; the host instantiates the
 //! component once and loads only the export the invocation needs, so a
@@ -26,8 +26,9 @@ pub(super) mod host_unified {
         inline: "
             package attricat:host-bindings;
             world host {
-                include attricat:host/attricat-extension@1.2.0;
-                include attricat:host/webhook-extension@1.2.0;
+                include attricat:host/attricat-extension@1.3.0;
+                include attricat:host/webhook-extension@1.3.0;
+                include attricat:host/command-extension@1.3.0;
             }
         ",
         world: "attricat:host-bindings/host",
@@ -42,9 +43,9 @@ pub(super) mod host_unified {
 
 use host_unified::attricat::host as v16;
 use host_unified::exports::attricat::host::{
-    command_handler as v11_command_handler, deferrable_operations as v11_operations,
-    event_handler as v11_event_handler, handler as v16_handler, operations as v16_operations,
-    webhook_receiver as v12_webhook_receiver,
+    command_handler as v11_command_handler, commands as v13_commands,
+    deferrable_operations as v11_operations, event_handler as v11_event_handler,
+    handler as v16_handler, operations as v16_operations, webhook_receiver as v12_webhook_receiver,
 };
 
 const RUN_ONLY_ERROR: &str = "this interface is available only during an operation run";
@@ -547,11 +548,50 @@ impl ExtensionRuntime {
         repository: AttricatRepository,
         handler: &str,
         request: &str,
+        locale: &str,
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
         let (mut store, pre, instance) = self
             .instantiate_unified(installation, repository, None, None)
             .await?;
+        // A 1.3 component answers through `commands`, which can refuse with a
+        // message for the person; older ones through their command export.
+        if let Ok(guest) = v13_commands::GuestIndices::new(&pre)
+            .and_then(|indices| indices.load(&mut store, &instance))
+        {
+            let response = guest
+                .call_handle_command(
+                    &mut store,
+                    &v13_commands::CommandRequest {
+                        handler: handler.to_owned(),
+                        payload: request.to_owned(),
+                        locale: locale.to_owned(),
+                    },
+                )
+                .await
+                .map(|result| {
+                    result
+                        .map(|response| response.payload)
+                        .map_err(|failure| match failure {
+                            v13_commands::CommandFailure::Rejected(rejection) => {
+                                ExtensionRuntimeError::CommandRejected(
+                                    super::CommandRejection::new(
+                                        &rejection.code,
+                                        &rejection.message,
+                                    ),
+                                )
+                            }
+                            v13_commands::CommandFailure::Fault(error) => {
+                                ExtensionRuntimeError::Runtime(error)
+                            }
+                        })
+                });
+            return match response {
+                Ok(Ok(payload)) => bounded_command_response(payload, max_response_bytes),
+                Ok(Err(error)) => Err(error),
+                Err(error) => Err(runtime_error(error)),
+            };
+        }
         let export = Self::load_export(
             &mut store,
             &pre,
@@ -585,15 +625,7 @@ impl ExtensionRuntime {
                 .map(|result| result.map(|response| response.payload)),
         };
         match response {
-            Ok(Ok(payload))
-                if payload.len() <= MAX_HOST_JSON_BYTES
-                    && payload.len() <= max_response_bytes as usize =>
-            {
-                Ok(payload)
-            }
-            Ok(Ok(_)) => Err(runtime_error(
-                "command response exceeds its declared byte limit",
-            )),
+            Ok(Ok(payload)) => bounded_command_response(payload, max_response_bytes),
             Ok(Err(error)) => Err(ExtensionRuntimeError::Runtime(error)),
             Err(error) => Err(runtime_error(error)),
         }
@@ -645,6 +677,20 @@ impl ExtensionRuntime {
                 run_operation_batch(&mut store, &operations, run, cancelling).await,
             ),
         }
+    }
+}
+
+/// A command's response, unless it exceeds the host's or its declared limit.
+fn bounded_command_response(
+    payload: String,
+    max_response_bytes: u64,
+) -> Result<String, ExtensionRuntimeError> {
+    if payload.len() <= MAX_HOST_JSON_BYTES && payload.len() <= max_response_bytes as usize {
+        Ok(payload)
+    } else {
+        Err(runtime_error(
+            "command response exceeds its declared byte limit",
+        ))
     }
 }
 

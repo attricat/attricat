@@ -7,7 +7,7 @@ Server-side extension code is a WebAssembly **component** declared as a `server_
 
 ## Host API version
 
-The host interface is the WIT package `attricat:host@1.2.0`, published as `wit/attricat-host-1.2.0.wit` in the [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) repository with every other released version. Set `attricat.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"`, `"^1.1"` or `"^1.2"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), [inbound webhooks](#receive-webhooks), and all client outlets. If your component uses anything added in 1.1 or 1.2, declare `"^1.1"` or `"^1.2"`, so an older host refuses the package instead of failing at run time.
+The host interface is the WIT package `attricat:host@1.3.0`, published as `wit/attricat-host-1.3.0.wit` in the [attricat-extension-sdk](https://github.com/attricat/attricat-extension-sdk) repository with every other released version. Set `attricat.host_api` in your manifest to a range that accepts it, such as `">=1.0.0, <2.0.0"`, `"^1.1"`, `"^1.2"` or `"^1.3"`. Every release with such a range can use every feature: event handlers, commands, typed reads and writes, scoped configuration, every kind of [operation](/extensions/operations/), [inbound webhooks](#receive-webhooks), and all client outlets. If your component uses anything added in 1.1, 1.2 or 1.3, declare `"^1.1"`, `"^1.2"` or `"^1.3"`, so an older host refuses the package instead of failing at run time.
 
 Build your component against one of these worlds:
 
@@ -18,6 +18,7 @@ Build your component against one of these worlds:
 | `operation-extension` | `operations` |
 | `outcome-extension` (1.1) | `event-handler`, `command-handler`, and `deferrable-operations` |
 | `webhook-extension` (1.2) | everything `outcome-extension` exports, plus `webhook-receiver` |
+| `command-extension` (1.3) | everything `webhook-extension` exports, with `commands` in place of `command-handler` |
 
 `outcome-extension` exports the 1.1 interfaces, which report [typed outcomes](#typed-outcomes) instead of a plain error. When a component exports a 1.1 interface, the host calls it instead of its 1.0 predecessor. A component that needs only some of the exports returns a fault from the others. Build for `webhook-extension` only if the extension [receives webhooks](#receive-webhooks).
 
@@ -113,7 +114,7 @@ A 1.1 `event-handler` exports `handle-event(event, delivery)`, which returns `re
 
 Traps, running out of fuel or memory, and timeouts count as faults. Outcomes are kept per event and handler, so when one handler of an event is retried, handlers that already completed are not called again. Rejected and exhausted deliveries stay visible for 30 days on the extension's management page, or until their event expires under `DOMAIN_EVENT_RETENTION_DAYS` if that is sooner.
 
-`command-handler` exports `handle-command` for [commands](#commands-for-your-ui), separately from event handling.
+`command-handler` exports `handle-command` for [commands](#commands-for-your-ui), separately from event handling. Since 1.3, `commands` exports it too, with a typed refusal; see [Refusing a command](#refusing-a-command).
 
 ## Clock
 
@@ -196,7 +197,13 @@ Server commands let an extension's client component ask its server component to 
 }]
 ```
 
-The client calls `attricat.command({ command_id: 'recalculate', payload: { record_id } })`. Attricat validates the payload against `request_schema`, checks the caller's session, the contribution, the release, and the grants, then calls `handle-command` with `handler: "recalculate"` and the payload as a JSON string. Return the response as a JSON string; it is validated against `response_schema` before the client receives it. An error you return does not quarantine the extension, but the client's promise rejects with a generic `extension command failed` message. Your error text is not passed on, so report problems the user should see, such as invalid input, inside the response.
+The client calls `attricat.command({ command_id: 'recalculate', payload: { record_id } })`. Attricat validates the payload against `request_schema`, checks the caller's session, the contribution, the release, and the grants, then calls `handle-command` with `handler: "recalculate"` and the payload as a JSON string. Return the response as a JSON string; it is validated against `response_schema` before the client receives it. An error you return does not quarantine the extension, but the client's promise rejects with a generic `extension command failed` message. Your error text is not passed on, so report problems the user should see, such as invalid input, inside the response, or refuse the command as below.
+
+### Refusing a command
+
+A component built for the 1.3 `command-extension` world handles commands through `commands`. Its request also carries `locale`, the language of the person who invoked the command, such as `pl` (empty when unknown). To refuse with an explanation, return `rejected { code, message }`: `code` is a snake_case identifier for programs and `message` is for the person, so write it in `locale` when you can.
+
+The host answers `422 extension_command_rejected` with `details { extension_id, rejection_code, reason }`, and a host-rendered action shows `reason` as written in its error toast. A rejection never quarantines the extension. A `fault`, a trap or a timeout is still answered with the generic `extension command failed`, without your text. A frame's `attricat.command` promise rejects without the reason either way, so a frame UI that should explain a refusal reports it inside the response.
 
 A command runs with the extension's grants, not the user's permissions. Check in your handler that the action makes sense for the record it names.
 

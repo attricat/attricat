@@ -63,6 +63,7 @@ error_codes! {
     DefaultContextOnly = "default_context_only",
     DefaultContextProtected = "default_context_protected",
     DisabledInDemo = "disabled_in_demo",
+    ExtensionCommandRejected = "extension_command_rejected",
     DuplicateNeedsUniqueValues = "duplicate_needs_unique_values",
     // Not an error response: a job a retry could not resync, listed in its
     // `job_errors`.

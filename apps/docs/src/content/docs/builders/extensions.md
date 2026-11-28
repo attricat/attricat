@@ -105,7 +105,7 @@ A host permission can declare how many requests the extension may send, such as 
 
 ## Export status
 
-For an extension that declares export destinations, the **Export status** section counts records per connection and status. Select a status to list its records with the destination's error, select records, and **Retry** them, or retry all records in that status. A retry marks the records as pending and asks the extension to export them again. The section also lists event deliveries the extension rejected or gave up on in the last 30 days, and any mapping editor the extension provides for each destination.
+For an extension that declares export destinations, the **Export status** section counts records per connection and status. Select a status to list its records with the destination's error, select records, and **Retry** them, or retry all records in that status. A retry marks the records as pending and asks the extension to export them again. The section also shows any mapping editor the extension provides for each destination. Event deliveries the extension rejected or gave up on are on its **Failures** tab.
 
 Each record's status is also on its [Exports tab](/guides/records/#exports), and the Data health page counts problems across extensions.
 
@@ -124,8 +124,15 @@ The extension must be enabled with `webhooks.receive` granted; otherwise senders
 
 ## When something goes wrong
 
+For an extension with background work, the **Failures** tab lists, newest first:
+
+- operation runs that failed or wait to retry, including scheduled ones, such as a nightly sync;
+- event deliveries the extension rejected or gave up on in the last 30 days.
+
+Each shows the extension's own error code and message, such as the reason an external service refused a request, so you can fix the data or the extension's settings. A run you started yourself also shows the extension's explanation on its page under **Profile → Extension runs** and in the notice when it fails, and an action whose command the extension refuses shows the reason in its error notice. The **Lifecycle** tab lists installs, upgrades and state changes, newest first; both tabs load more entries as you ask for them.
+
 - **Disable** an extension to stop it without losing its configuration and grants.
-- **Quarantine** marks an installation as unsafe. Attricat quarantines an extension automatically when its server code crashes or runs out of memory or time. Older extensions are also quarantined when they return an error while handling an event; extensions built for host API 1.1 report a rejected record or a temporary failure instead, which is retried or shown in the export status. Re-enabling it checks the release and configuration again.
+- **Quarantine** marks an installation as unsafe. Attricat quarantines an extension automatically when its server code crashes or runs out of memory or time. Older extensions are also quarantined when they return an error while handling an event; extensions built for host API 1.1 report a rejected record or a temporary failure instead, which is retried or shown on the **Failures** tab. Re-enabling it checks the release and configuration again.
 - **Remove** uninstalls it. Its history stays in the audit log.
 - The workspace **extensions mode** switch turns off every extension in the workspace at once, without changing any installation. Turn it back on to restore the ones that were enabled.
 

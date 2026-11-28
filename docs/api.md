@@ -837,6 +837,7 @@ results report the same `code`, `message` and `details`.
 | `422` | `publication_checks_failed` | `violations` and `context` (the channel's context code) |
 | `422` | `attribute_value_schema_mismatch` | `attribute`, `instance_path` (JSON Pointer of the failing value) |
 | `422` | `record_schema_mismatch` | `context`, `instance_path` |
+| `422` | `extension_command_rejected` | `extension_id`, `rejection_code` and `reason`: a 1.3 extension command refused the request; `reason` is the extension's own message for the person |
 | `422` | `duplicate_needs_unique_values` | `attributes`: the required unique-key attribute codes a copy would leave out |
 | `422` | `invalid_blueprint_definition`, `invalid_rule_definition`, `invalid_workflow_definition` | `reason`: what is wrong with the definition, without the code's own prefix |
 | `422` | `relationship_path_type_conflict` | `path`, `segment`, and `conflicts`: groups of `{ value_type, blueprints }`, or for a relationship the path continues through `{ targets, blueprints }`; the target blueprints a path passes through declare `segment` differently |

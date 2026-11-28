@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import '../../i18n';
 import { toast } from '../../components/toast';
+import { ApiRequestError } from '../../api/request';
 import { recordQueryKeys } from '../records/queryKeys';
 import { useActionConfirmStore } from './actionConfirmStore';
 import { useActionDialogStore } from './actionDialogStore';
@@ -220,6 +221,43 @@ describe('ExtensionActionMenuItems', () => {
     await waitFor(() =>
       expect(toast.error).toHaveBeenCalledWith(
         '“Title check” could not be completed.',
+      ),
+    );
+  });
+
+  it("shows the extension's message when its command refuses", async () => {
+    vi.mocked(getExtensionRuntime).mockResolvedValue([
+      action('check', { command: 'check-formulas' }),
+    ]);
+    vi.mocked(extensionCommand).mockRejectedValue(
+      new ApiRequestError(
+        422,
+        'the extension refused the request',
+        'extension_command_rejected',
+        {
+          extension_id: 'acme.tools',
+          rejection_code: 'client_rejected',
+          reason: 'NIP is invalid',
+        },
+      ),
+    );
+    renderWithClient(
+      <MenuList>
+        <ExtensionActionMenuItems
+          outlet="explorer_row_action"
+          runtimeScope={runtimeScope}
+          target={target}
+        />
+      </MenuList>,
+    );
+
+    await userEvent.click(
+      await screen.findByRole('menuitem', { name: 'Title check' }),
+    );
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        'The extension refused the request. NIP is invalid',
       ),
     );
   });

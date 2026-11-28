@@ -23,6 +23,9 @@ export const notFoundError = () =>
     'resource was not found',
     notFoundErrorCode,
   );
+/** An extension command refused the request with a message for its user. */
+export const extensionCommandRejectedErrorCode =
+  'extension_command_rejected' satisfies ApiErrorCode;
 /** A rejected request, such as a query naming fields its blueprint lacks. */
 export const invalidInputErrorCode = 'invalid_input' satisfies ApiErrorCode;
 

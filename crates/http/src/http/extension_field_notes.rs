@@ -63,6 +63,16 @@ const CACHEABLE_FIELD_NOTES_TTL: Duration = Duration::from_secs(60 * 60);
 const MAX_CACHED_FIELD_NOTES: usize = 10_000;
 /// The longest locale tag forwarded to extensions.
 const MAX_LOCALE_BYTES: usize = 16;
+/// The field of a field notes request that carries the viewer's language.
+const LOCALE_FIELD: &str = "locale";
+
+/// Whether `locale` is a short language tag, or empty for unknown.
+pub(super) fn valid_locale(locale: &str) -> bool {
+    locale.len() <= MAX_LOCALE_BYTES
+        && locale
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
 
 /// One provider's notes for one record, context and locale: the workspace,
 /// release, [`installation_fingerprint`], record, [`RecordScope::fingerprint`],
@@ -240,11 +250,7 @@ pub(super) async fn post(
         )));
     }
     let locale = input.locale.unwrap_or_default();
-    if locale.len() > MAX_LOCALE_BYTES
-        || !locale
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
-    {
+    if !valid_locale(&locale) {
         return Err(ApiError::invalid_input("locale is invalid".into()));
     }
     let providers = repository.enabled_field_note_providers().await?;
@@ -349,7 +355,7 @@ pub(super) async fn post(
                     "blueprint_version": scopes[record_id].blueprint_version,
                 })).collect::<Vec<_>>(),
                 "context_id": context_id,
-                "locale": locale,
+                (LOCALE_FIELD): locale,
             });
             let asking = Asking(batch.iter().map(|(_, key)| key.clone()).collect());
             let batch = batch
@@ -565,6 +571,12 @@ async fn ask(
         })
         .ok_or("the field notes command is not declared")?;
     validate_schema(&command.request_schema, &request).map_err(|error| error.to_string())?;
+    let locale = request
+        .get(LOCALE_FIELD)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned();
+    let locale = locale.as_str();
     let request = request.to_string();
     if request.len() > command.max_request_bytes as usize {
         return Err("the request exceeds the command's byte limit".into());
@@ -576,6 +588,7 @@ async fn ask(
             repository,
             &command.handler,
             &request,
+            locale,
             command.max_response_bytes,
         )
         .await

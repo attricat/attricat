@@ -15,7 +15,7 @@
 // catalog, transfer, selection) fail outside an operation run, and direct
 // catalog reads/writes through `api` fail inside one, because operation runs
 // access catalog data only through their run-scoped interfaces.
-package attricat:host@1.2.0;
+package attricat:host@1.3.0;
 
 interface api {
   record event {
@@ -286,6 +286,29 @@ interface webhook-receiver {
   receive: func(request: webhook-request) -> result<webhook-outcome, string>;
 }
 
+/// 1.3: client commands that can refuse with a message for the person who
+/// invoked them. The host shows a rejection's `message` as written, for
+/// example in an error toast, so write it in the request's `locale` when you
+/// can. A rejection never quarantines the installation; a `fault`, a trap,
+/// fuel or memory exhaustion and a timeout are answered with a generic error.
+interface commands {
+  record command-request {
+    handler: string,
+    payload: string,
+    /// The language of the person who invoked the command, such as `pl` or
+    /// `en-GB`; empty when the host does not know it.
+    locale: string,
+  }
+  record command-response { payload: string }
+  /// `code` is a snake_case identifier for programs; `message` is for people.
+  record command-rejection { code: string, message: string }
+  variant command-failure {
+    rejected(command-rejection),
+    fault(string),
+  }
+  handle-command: func(request: command-request) -> result<command-response, command-failure>;
+}
+
 /// Every host import. Worlds below differ only in exports.
 world imports {
   import api;
@@ -332,6 +355,17 @@ world webhook-extension {
   include imports;
   export event-handler;
   export command-handler;
+  export deferrable-operations;
+  export webhook-receiver;
+}
+
+/// 1.3: everything `webhook-extension` exports, with client commands through
+/// `commands` instead of `command-handler`. Components that need only some of
+/// them return a fault from the others.
+world command-extension {
+  include imports;
+  export event-handler;
+  export commands;
   export deferrable-operations;
   export webhook-receiver;
 }

@@ -105,7 +105,7 @@ Uprawnienie hosta może deklarować, ile żądań rozszerzenie może wysłać, n
 
 ## Stan eksportu
 
-Dla rozszerzenia, które deklaruje miejsca docelowe eksportu, sekcja **Stan eksportu** pokazuje liczbę rekordów według połączenia i stanu. Wybierz stan, aby zobaczyć jego rekordy wraz z błędem z miejsca docelowego, zaznacz rekordy i wybierz **Ponów** albo ponów wszystkie rekordy w tym stanie. Ponowienie oznacza rekordy jako oczekujące i prosi rozszerzenie o ich ponowny eksport. Sekcja pokazuje też dostarczenia zdarzeń, które rozszerzenie odrzuciło lub których zaniechało w ciągu ostatnich 30 dni, oraz edytor mapowań, jeśli rozszerzenie udostępnia go dla danego miejsca docelowego.
+Dla rozszerzenia, które deklaruje miejsca docelowe eksportu, sekcja **Stan eksportu** pokazuje liczbę rekordów według połączenia i stanu. Wybierz stan, aby zobaczyć jego rekordy wraz z błędem z miejsca docelowego, zaznacz rekordy i wybierz **Ponów** albo ponów wszystkie rekordy w tym stanie. Ponowienie oznacza rekordy jako oczekujące i prosi rozszerzenie o ich ponowny eksport. Sekcja pokazuje też edytor mapowań, jeśli rozszerzenie udostępnia go dla danego miejsca docelowego. Dostarczenia zdarzeń, które rozszerzenie odrzuciło lub których zaniechało, są na jego karcie **Błędy**.
 
 Stan każdego rekordu widać też na jego [karcie Eksporty](/pl/guides/records/#eksporty), a strona Stan danych zlicza problemy we wszystkich rozszerzeniach.
 
@@ -124,8 +124,15 @@ Rozszerzenie musi być włączone i mieć przyznane `webhooks.receive`; w przeci
 
 ## Gdy coś pójdzie nie tak
 
+Dla rozszerzenia, które działa w tle, karta **Błędy** pokazuje, od najnowszych:
+
+- wykonania operacji, które się nie powiodły lub czekają na ponowienie, także zaplanowane, np. nocną synchronizację;
+- dostarczenia zdarzeń, które rozszerzenie odrzuciło lub których zaniechało w ciągu ostatnich 30 dni.
+
+Każdy wpis ma kod i komunikat błędu od samego rozszerzenia, np. powód, dla którego usługa zewnętrzna odrzuciła żądanie, więc możesz poprawić dane lub ustawienia rozszerzenia. Wykonanie uruchomione przez Ciebie pokazuje wyjaśnienie rozszerzenia także na swojej stronie w **Profil → Uruchomienia rozszerzeń** i w powiadomieniu o niepowodzeniu, a akcja, której polecenia rozszerzenie odmówi, pokazuje powód w powiadomieniu o błędzie. Karta **Cykl życia** pokazuje instalacje, uaktualnienia i zmiany stanu, od najnowszych; obie karty doczytują kolejne wpisy na żądanie.
+
 - **Wyłącz** rozszerzenie, aby je zatrzymać bez utraty konfiguracji i przyznanych uprawnień.
-- **Kwarantanna** oznacza instalację jako niebezpieczną. Attricat automatycznie poddaje rozszerzenie kwarantannie, gdy jego kod serwerowy ulegnie awarii albo wyczerpie pamięć lub czas. Starsze rozszerzenia trafiają do kwarantanny także wtedy, gdy zwrócą błąd podczas obsługi zdarzenia; rozszerzenia zbudowane dla API hosta 1.1 zgłaszają zamiast tego odrzucony rekord lub błąd przejściowy, który jest ponawiany albo widoczny w stanie eksportu. Ponowne włączenie jeszcze raz sprawdza wydanie i konfigurację.
+- **Kwarantanna** oznacza instalację jako niebezpieczną. Attricat automatycznie poddaje rozszerzenie kwarantannie, gdy jego kod serwerowy ulegnie awarii albo wyczerpie pamięć lub czas. Starsze rozszerzenia trafiają do kwarantanny także wtedy, gdy zwrócą błąd podczas obsługi zdarzenia; rozszerzenia zbudowane dla API hosta 1.1 zgłaszają zamiast tego odrzucony rekord lub błąd przejściowy, który jest ponawiany albo widoczny na karcie **Błędy**. Ponowne włączenie jeszcze raz sprawdza wydanie i konfigurację.
 - **Usuń** odinstalowuje rozszerzenie. Jego historia pozostaje w dzienniku audytu.
 - Przełącznik **trybu rozszerzeń** obszaru roboczego wyłącza naraz wszystkie rozszerzenia w obszarze roboczym, bez zmieniania żadnej instalacji. Włącz go ponownie, aby przywrócić te, które były włączone.
 

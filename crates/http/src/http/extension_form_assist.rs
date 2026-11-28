@@ -479,6 +479,7 @@ async fn ask(
             repository,
             &command.handler,
             &request,
+            "",
             command.max_response_bytes,
         )
         .await

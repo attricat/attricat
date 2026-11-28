@@ -17,9 +17,11 @@ use super::{
     auth::{ActiveWorkspace, AuthenticatedPrincipal, ScopedRepository},
     conditional,
     error::ApiError,
+    extension_field_notes::valid_locale,
     extractors::{ApiJson, ApiPath, ApiQuery},
     page_cursor::{Page, PageQuery},
 };
+use crate::extension_runtime::ExtensionRuntimeError;
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
     extension_installer::{ExtensionInstallError, ExtensionInstaller, dev_artifact_key},
@@ -51,6 +53,9 @@ pub(super) struct CommandRequest {
     release_id: Uuid,
     command_id: String,
     payload: Value,
+    /// The invoking person's language, forwarded to 1.3 commands.
+    #[serde(default)]
+    locale: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1022,6 +1027,10 @@ pub(super) async fn command(
             "extension command request exceeds its declared byte limit".into(),
         ));
     }
+    let locale = input.locale.unwrap_or_default();
+    if !valid_locale(&locale) {
+        return Err(ApiError::invalid_input("locale is invalid".into()));
+    }
     let response = state
         .extension_runtime
         .invoke_command(
@@ -1029,12 +1038,18 @@ pub(super) async fn command(
             repository.for_extension(&extension_id),
             &command.handler,
             &request,
+            &locale,
             command.max_response_bytes,
         )
         .await
-        .map_err(|error| {
-            tracing::warn!(extension = %extension_id, command = %command.id, %error, "extension command failed");
-            ApiError::service_unavailable("extension command failed")
+        .map_err(|error| match error {
+            ExtensionRuntimeError::CommandRejected(rejection) => {
+                ApiError::extension_command_rejected(&extension_id, &rejection)
+            }
+            error => {
+                tracing::warn!(extension = %extension_id, command = %command.id, %error, "extension command failed");
+                ApiError::service_unavailable("extension command failed")
+            }
         })?;
     let response: Value = serde_json::from_str(&response)
         .map_err(|_| ApiError::service_unavailable("extension command returned invalid JSON"))?;

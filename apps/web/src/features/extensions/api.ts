@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import i18n from '../../i18n';
 import { jsonRequest, request, requestText } from '../../api/request';
 import { maximumExtensionResponseBytes } from './constants';
 import {
@@ -90,7 +91,8 @@ export const extensionCommand = async (
     {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(input),
+      // The host adds the viewer's language, so a 1.3 command can refuse in it.
+      body: JSON.stringify({ ...input, locale: i18n.language }),
     },
   );
   return parseExtensionResponse(response, 'command');

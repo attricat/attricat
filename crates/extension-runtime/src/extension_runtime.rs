@@ -83,7 +83,7 @@ pub use export_host::use_public_file_link_base;
 pub use network_v2::forget_lowered_budget;
 use operation_batch::{BatchError, BatchResult, run_operation_batch};
 use outcomes::retry_backoff;
-pub use outcomes::{InvocationFailure, Rejection};
+pub use outcomes::{CommandRejection, InvocationFailure, Rejection};
 pub use webhooks::{
     KeptPayload, MAX_WEBHOOK_REPLY_BYTES, WEBHOOK_RATE_LIMIT, WEBHOOK_RATE_WINDOW,
     WEBHOOK_RECEIVE_TIMEOUT, WEBHOOK_ROUTE_PREFIX, WebhookOutcome, WebhookReply, WebhookRequest,
@@ -215,6 +215,9 @@ pub enum ExtensionRuntimeError {
     Runtime(String),
     #[error("extension host operation denied: {0}")]
     Denied(String),
+    /// A 1.3 command refused the request, with a message for its user.
+    #[error("extension command rejected the request: {}", .0.code)]
+    CommandRejected(CommandRejection),
 }
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
@@ -642,14 +645,17 @@ impl ExtensionRuntime {
         )
     }
 
-    /// Invokes a v1.1 component command after its HTTP broker has resolved a
-    /// locked enabled-release snapshot.
+    /// Invokes a component command after its HTTP broker has resolved a
+    /// locked enabled-release snapshot. `locale` is the invoking person's
+    /// language, empty when unknown; only 1.3 `commands` receive it. A 1.3
+    /// rejection is [`ExtensionRuntimeError::CommandRejected`].
     pub async fn invoke_command(
         &self,
         installation: &ExtensionRuntimeInstallation,
         repository: AttricatRepository,
         handler: &str,
         request: &str,
+        locale: &str,
         max_response_bytes: u64,
     ) -> Result<String, ExtensionRuntimeError> {
         self.invoke_unified_command(
@@ -657,6 +663,7 @@ impl ExtensionRuntime {
             repository,
             handler,
             request,
+            locale,
             max_response_bytes,
         )
         .await

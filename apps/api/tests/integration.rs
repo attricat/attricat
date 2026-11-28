@@ -38,6 +38,7 @@ mod domain_events;
 mod event_delivery_tasks;
 mod extension_attribute_types;
 mod extension_brokered_egress;
+mod extension_commands;
 mod extension_export_platform;
 mod extension_export_scale;
 mod extension_field_notes;

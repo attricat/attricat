@@ -200,6 +200,7 @@ async fn one_unified_component_serves_commands_and_interactive_operations(pool: 
                 repository.clone(),
                 "probe",
                 r#"{"n":1}"#,
+                "",
                 65536,
             )
             .await
@@ -725,6 +726,7 @@ async fn a_component_compiled_in_a_child_process_runs_like_any_other(pool: sqlx:
                 repository.clone(),
                 "probe",
                 r#"{"n":1}"#,
+                "",
                 65536,
             )
             .await
@@ -738,7 +740,7 @@ async fn a_component_compiled_in_a_child_process_runs_like_any_other(pool: sqlx:
     let broken = runtime_with("/nonexistent/compiler");
     for expected in ["component compilation failed", "failed to compile recently"] {
         let error = broken
-            .invoke_command(&installation, repository.clone(), "probe", "{}", 65536)
+            .invoke_command(&installation, repository.clone(), "probe", "{}", "", 65536)
             .await
             .unwrap_err()
             .to_string();

@@ -81,6 +81,23 @@ impl ApiError {
         )
         .with_details(serde_json::json!({ "permission": permission }))
     }
+    /// A 1.3 extension command refused the request. `reason` is the
+    /// extension's own message for the person, shown as written.
+    pub(super) fn extension_command_rejected(
+        extension_id: &str,
+        rejection: &crate::extension_runtime::CommandRejection,
+    ) -> Self {
+        Self::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::ExtensionCommandRejected,
+            "the extension refused the request",
+        )
+        .with_details(serde_json::json!({
+            "extension_id": extension_id,
+            "rejection_code": rejection.code,
+            "reason": rejection.message,
+        }))
+    }
     /// The shared demo accounts must keep working for every visitor.
     pub(super) fn disabled_in_demo() -> Self {
         Self::new(

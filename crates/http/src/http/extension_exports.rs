@@ -1110,6 +1110,7 @@ pub(super) async fn preview_export(
             repository.for_extension(&extension_id),
             &command.handler,
             &payload.to_string(),
+            "",
             command.max_response_bytes,
         )
         .await

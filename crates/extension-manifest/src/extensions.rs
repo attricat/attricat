@@ -22,7 +22,7 @@ pub const MANIFEST_VERSION: u32 = 1;
 /// The host ABI accepted by manifests: the `attricat:host` WIT package version.
 /// It evolves additively, so a manifest whose `attricat.host_api` range accepts
 /// it may use every server and client feature.
-pub const SUPPORTED_HOST_API: &str = "1.2.0";
+pub const SUPPORTED_HOST_API: &str = "1.3.0";
 pub const MAX_EXTENSION_ARCHIVE_BYTES: usize = 32 * 1024 * 1024;
 pub const MAX_EXTENSION_UNPACKED_BYTES: usize = 128 * 1024 * 1024;
 /// A server component, which leaves room for a debug build. This bounds what is

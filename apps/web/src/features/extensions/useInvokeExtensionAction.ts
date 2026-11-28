@@ -2,7 +2,11 @@ import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useNavigate } from '@tanstack/react-router';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../../api/errors';
+import {
+  errorMessage,
+  extensionCommandRejectedErrorCode,
+} from '../../api/errors';
+import { ApiRequestError } from '../../api/request';
 import { randomUuid } from '../../components/randomUuid';
 import { toast } from '../../components/toast';
 import {
@@ -189,9 +193,15 @@ export const useInvokeExtensionAction = () => {
               contributionId: to.route,
             },
           });
-      } catch {
+      } catch (error) {
         toast.dismiss(progress);
-        toast.error(t('extensions.actionFailed', { action: title }));
+        // A refusal carries the extension's own message for the person.
+        toast.error(
+          error instanceof ApiRequestError &&
+            error.code === extensionCommandRejectedErrorCode
+            ? errorMessage(error)
+            : t('extensions.actionFailed', { action: title }),
+        );
       }
     },
     [

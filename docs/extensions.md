@@ -237,9 +237,9 @@ implemented. Attricat does not send outbound webhooks.
 
 The host ABI is the single WIT package `attricat:host` at
 `crates/extension-runtime/wit-host/attricat-extension.wit`, currently
-`attricat:host@1.2.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
+`attricat:host@1.3.0` (`SUPPORTED_HOST_API` in `crates/extension-manifest`). A
 release's `attricat.host_api` range must accept that version, for example
-`">=1.0.0, <2.0.0"`, `"^1.0"`, `"^1.1"` or `"^1.2"`. A release whose range accepts it may use every
+`">=1.0.0, <2.0.0"`, `"^1.0"`, `"^1.1"`, `"^1.2"` or `"^1.3"`. A release whose range accepts it may use every
 server and client feature in one component: event handlers, client commands,
 typed reads and writes, scoped configuration, scheduled, connector and
 interactive operations, artifacts, transfer, connector jobs, inbound webhooks,
@@ -250,7 +250,8 @@ The package defines the interfaces `api`, `handler`, `artifacts`,
 `attricat-data`, `attricat` (connector calls), `transfer`, `selection` and
 `operations`, and since
 1.1 `clock`, `outcomes`, `event-handler`, `command-handler` and
-`deferrable-operations`, and since 1.2 `webhook-receiver`. The `imports` world
+`deferrable-operations`, since 1.2 `webhook-receiver`, and since 1.3
+`commands`. The `imports` world
 imports every host interface. A component targets the combined
 `attricat-extension` world (exports `handler` and `operations`), the narrower
 `handler-extension` or `operation-extension` world, the 1.1
@@ -259,8 +260,16 @@ imports every host interface. A component targets the combined
 [Export platform](#export-platform-attricathost-11)), or the 1.2
 `webhook-extension` world (the `outcome-extension` exports plus
 `webhook-receiver`; see
-[Inbound webhooks](#inbound-webhooks-attricathost-12)). When a component exports
-a 1.1 interface the host calls it instead of its 1.0 predecessor. The host
+[Inbound webhooks](#inbound-webhooks-attricathost-12)), or the 1.3
+`command-extension` world (the `webhook-extension` exports with `commands` in
+place of `command-handler`). When a component exports a 1.1 interface the host
+calls it instead of its 1.0 predecessor, and it calls a 1.3 `commands` export
+instead of either command export. A `commands` handler receives the invoking
+person's `locale` (empty when unknown) and may return `rejected { code,
+message }`: `POST /extensions/{id}/{contribution}/command` then answers
+`422 extension_command_rejected` with `details { extension_id,
+rejection_code, reason }`, and the web app's action toast shows `reason` as
+written. A rejection never quarantines; a `fault` stays a generic `503`. The host
 links every import for every invocation and loads only the export it needs. Run-bound
 interfaces (`artifacts`, `attricat-data`, `attricat`, `transfer`, `selection`)
 return an error outside an operation run. Direct catalog access through `api`
