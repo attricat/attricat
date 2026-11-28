@@ -287,6 +287,10 @@ is numbered like any new record. Balances and the values a
 copied balance record starts at zero, and a copied movement record applies its
 own movement.
 
+Values of [`readonly`](blueprints.md) attributes are left out too, as the
+web app lets no one set them on a new record, unless the `record_schema`
+requires them.
+
 Values of the family's enforced `unique_keys` attributes are left out,
 because the copy could never share them with its source: the default-context
 value for a workspace-scoped key, and every context's values for a

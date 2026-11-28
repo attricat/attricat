@@ -438,6 +438,8 @@ impl AttricatRepository {
     /// context's values for context-scoped keys. Values only core writes are
     /// left out too: the copy is numbered like any new record, a balance
     /// starts at zero, and a movement record's copy applies its own movement.
+    /// So are values of `readonly` attributes, which the web app never lets
+    /// anyone set on a new record, unless the record schema requires them.
     pub async fn duplicate_record(&self, record_id: Uuid) -> Result<Record, RepositoryError> {
         let source = self
             .get_record(record_id)
@@ -458,13 +460,20 @@ impl AttricatRepository {
         .bind(source.blueprint_version)
         .fetch_one(&self.pool)
         .await?;
-        let mut required_keys = record_schema
+        let required: HashSet<&str> = record_schema
             .as_ref()
             .and_then(|schema| schema.get("required"))
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)
+            .collect();
+        let readonly = self
+            .readonly_attribute_codes(source.blueprint_id, source.blueprint_version)
+            .await?;
+        let mut required_keys = required
+            .iter()
+            .copied()
             .filter(|code| key_codes.contains_key(*code) && !core_assigned.contains(*code))
             .map(str::to_owned)
             .collect::<Vec<_>>();
@@ -476,6 +485,7 @@ impl AttricatRepository {
         }
         let copied = |attribute_code: &str, context_id: Option<Uuid>| {
             !core_assigned.contains(attribute_code)
+                && (!readonly.contains(attribute_code) || required.contains(attribute_code))
                 && key_codes
                     .get(attribute_code)
                     .is_none_or(|scope| match scope {
@@ -520,6 +530,9 @@ impl AttricatRepository {
                     context_id,
                     files,
                 } => {
+                    if !copied(&attribute_code, context_id) {
+                        return None;
+                    }
                     let ids = files.into_iter().map(|file| file.id);
                     match file_values.iter_mut().find(|value| {
                         value.attribute_code == attribute_code && value.context_id == context_id
@@ -570,6 +583,24 @@ impl AttricatRepository {
         self.commit_record_mutation(transaction, changes, event)
             .await?;
         Ok(record)
+    }
+
+    /// Codes of the blueprint revision's `readonly` attributes.
+    async fn readonly_attribute_codes(
+        &self,
+        blueprint_id: Uuid,
+        blueprint_version: i64,
+    ) -> Result<HashSet<String>, RepositoryError> {
+        Ok(sqlx::query_scalar::<_, String>(
+            "SELECT code FROM attributes WHERE workspace_id = $1 AND blueprint_id = $2 AND blueprint_version = $3 AND readonly AND deleted_at IS NULL",
+        )
+        .bind(self.workspace_id.0)
+        .bind(blueprint_id)
+        .bind(blueprint_version)
+        .fetch_all(&self.pool)
+        .await?
+        .into_iter()
+        .collect())
     }
 
     /// The workspace's default context and the scope of each attribute code

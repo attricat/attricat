@@ -772,3 +772,91 @@ async fn record_changes_say_when_a_file_is_no_longer_stored(pool: PgPool) {
     assert_eq!(changes[0]["deleted_file_ids"], json!([file_id]));
     server.abort();
 }
+
+#[sqlx::test(migrator = "api::MIGRATOR")]
+async fn duplicating_leaves_out_read_only_values_the_schema_does_not_require(pool: PgPool) {
+    let (base_url, server) = start_server(pool.clone()).await;
+    let client = authenticated_client();
+    let blueprint = create_blueprint(
+        &client,
+        &base_url,
+        r#"format_version: 1
+code: duplicate_readonly
+name: Read-only values
+kind: record
+record_schema: '{"required": ["reference"]}'
+views:
+  dropdown_option:
+    type: dropdown_option
+    fields: [title]
+attributes:
+  - code: title
+    value_type: string
+  - code: external_id
+    value_type: string
+    readonly: true
+  - code: reference
+    value_type: string
+    readonly: true
+  - code: image
+    value_type: file
+    cardinality: one
+    allowed_mime_groups: [image]
+    allowed_extensions: [png]
+    image_only: true"#,
+    )
+    .await;
+    let file_id = stage_png(&client, &base_url, &blueprint, "image").await;
+    let record = expect_status(
+        client
+            .post(format!("{base_url}/v1/records"))
+            .json(&json!({
+                "blueprint": {"code": "duplicate_readonly"},
+                "values": [
+                    scalar("title", json!("Original")),
+                    scalar("external_id", json!("EXT-1")),
+                    scalar("reference", json!("REF-1")),
+                ],
+                "files": [{"attribute_code": "image", "file_ids": [file_id]}],
+            }))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    // Files cannot be linked to a read-only attribute, so make the image
+    // read-only only once the source has one.
+    sqlx::query("UPDATE attributes SET readonly = true WHERE code = 'image' AND blueprint_id = $1")
+        .bind(blueprint_id(&blueprint).parse::<Uuid>().unwrap())
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let copy = expect_status(
+        client
+            .post(format!(
+                "{base_url}/v1/records/{}/duplicate",
+                record["id"].as_str().unwrap()
+            ))
+            .send()
+            .await
+            .unwrap(),
+        StatusCode::CREATED,
+    )
+    .await;
+    let copied: Vec<String> = sqlx::query_scalar(
+        "SELECT a.code FROM attribute_values v JOIN attributes a ON a.id = v.attribute_id WHERE v.record_id = $1 AND v.active ORDER BY a.code",
+    )
+    .bind(copy["id"].as_str().unwrap().parse::<Uuid>().unwrap())
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(copied, ["reference", "title"]);
+    assert!(
+        linked_files(&pool, copy["id"].as_str().unwrap())
+            .await
+            .is_empty()
+    );
+    server.abort();
+}
