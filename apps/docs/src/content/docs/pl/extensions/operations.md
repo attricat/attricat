@@ -91,12 +91,12 @@ Dodaj `interactive` do operacji, aby zalogowani użytkownicy mogli ją uruchomi�
 {"id": "generate", "handler": "generate", "request_schema": {"type": "object"}, "interactive": {"version": 1, "max_selection": 50}}
 ```
 
-Wymaga to `client.operations.start`. Zbuduj komponent dla [świata](/pl/extensions/server/#wersja-api-hosta), który eksportuje `operations` lub `deferrable-operations`; jego interfejs `selection` działa w uruchomieniu interaktywnym.
+Wymaga to `client.operations.start`. Zbuduj komponent dla [świata](/pl/extensions/server/#wersja-api-hosta), który eksportuje `operations` lub `deferrable-operations`; jego interfejs `selection` działa w wykonaniu interaktywnym.
 
 Przy starcie Attricat sprawdza, czy użytkownik może odczytać każdy zaznaczony rekord, i utrwala użytkownika, wydanie, dane wejściowe, kontekst oraz uporządkowane zaznaczenie. Następnie:
 
 - `selection.describe()` zwraca liczbę rekordów, wersję schematu i kontekst.
-- `selection.page(cursor, limit)` zwraca od 1 do 10 rekordów z zapisanymi wartościami rozwiązanymi w kontekście uruchomienia, zapisanymi wartościami dołączonych atrybutów wielokrotnego użytku (`reusable_values`, z `context_id` każdej wartości), Twoimi adnotacjami i `read_at`. Rekordy, których użytkownik nie może już odczytać, mają status `unavailable`, a usunięte `deleted`.
+- `selection.page(cursor, limit)` zwraca od 1 do 10 rekordów z zapisanymi wartościami rozwiązanymi w kontekście wykonania, zapisanymi wartościami dołączonych atrybutów wielokrotnego użytku (`reusable_values`, z `context_id` każdej wartości), Twoimi adnotacjami i `read_at`. Rekordy, których użytkownik nie może już odczytać, mają status `unavailable`, a usunięte `deleted`.
 - `attricat-data.read` odczytuje to, z czym zaznaczenie jest powiązane, o ile użytkownik nadal może to odczytać:
   - `record` zwraca zaznaczony rekord, rekord, którego relacja wskazuje na zaznaczony (na przykład pozycje zamówienia), albo rekord osiągalny z nich przez co najwyżej trzy wartości relacji (na przykład jednostkę produktu z pozycji). Gdy na zaznaczenie wskazuje ponad 10 000 wartości relacji, w ten sposób można odczytać tylko zaznaczone rekordy.
   - `incoming` wymienia rekordy, które wskazują na zaznaczony rekord, bez tych, których użytkownik nie może odczytać.
@@ -104,11 +104,11 @@ Przy starcie Attricat sprawdza, czy użytkownik może odczytać każdy zaznaczon
 
   Inne odczyty oraz wywołania konektorowego interfejsu `attricat` są odrzucane.
 - `attricat-data.batch` przyjmuje intencje `update`, `relationships` i `annotate` tylko dla zaznaczonych rekordów, sprawdzane względem bieżących uprawnień użytkownika.
-- Jeśli użytkownik opuści obszar roboczy, uruchomienie zatrzymuje się z bezpiecznym powodem zamiast działać dalej z uprawnieniami rozszerzenia.
+- Jeśli użytkownik opuści obszar roboczy, wykonanie zatrzymuje się z bezpiecznym powodem zamiast działać dalej z uprawnieniami rozszerzenia.
 
-Pobierz z każdego rekordu to, czego potrzebujesz, raz i zapisz w punkcie kontrolnym, aby ponowiona partia tworzyła te same bajty. Raportuj postęp jako `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat pokazuje te liczby niezależnie od statusu uruchomienia, więc uruchomienie może się zakończyć mimo niepowodzeń części rekordów.
+Pobierz z każdego rekordu to, czego potrzebujesz, raz i zapisz w punkcie kontrolnym, aby ponowiona partia tworzyła te same bajty. Raportuj postęp jako `{"completed": n, "total": n, "outcome": {"succeeded": n, "failed": n, "skipped": n}}`; Attricat pokazuje te liczby niezależnie od statusu wykonania, więc wykonanie może się zakończyć mimo niepowodzeń części rekordów.
 
-Użytkownicy widzą swoje uruchomienia w **Profil → Uruchomienia rozszerzeń**. Uruchomienie widzą tylko osoba, która je rozpoczęła, i osoby z `extensions.manage`. Osoba, która je rozpoczęła, zawsze może je anulować, ale otworzyć je i pobrać wyniki może tylko dopóty, dopóki może odczytać każdy zaznaczony rekord. Osoby z `extensions.manage` mogą otwierać, anulować i pobierać każde uruchomienie.
+Użytkownicy widzą swoje wykonania w **Profil → Wykonania rozszerzeń**. Wykonanie widzą tylko osoba, która je rozpoczęła, i osoby z `extensions.manage`. Osoba, która je rozpoczęła, zawsze może je anulować, ale otworzyć je i pobrać wyniki może tylko dopóty, dopóki może odczytać każdy zaznaczony rekord. Osoby z `extensions.manage` mogą otwierać, anulować i pobierać każde wykonanie.
 
 ## Operacje na schemacie
 
@@ -118,11 +118,11 @@ Import zaczyna się od schematu, a nie od rekordów. Ustaw `scope` na `blueprint
 {"id": "import", "handler": "import", "request_schema": {"type": "object"}, "interactive": {"version": 1, "scope": "blueprint"}}
 ```
 
-Uruchomienie wymaga uprawnienia `records.write` w całym obszarze roboczym, bo może ono tworzyć rekordy. Nie ma zaznaczenia, a jego możliwości są węższe niż osoby wpisującej te same wartości:
+Wykonanie wymaga uprawnienia `records.write` w całym obszarze roboczym, bo może ono tworzyć rekordy. Nie ma zaznaczenia, a jego możliwości są węższe niż osoby wpisującej te same wartości:
 
-- `attricat-data.batch` przyjmuje tylko intencje `create` i `upsert` dla wersji schematu tego uruchomienia, bez tagów i metadanych systemowych, sprawdzane względem bieżących uprawnień osoby, która je rozpoczęła. Inne intencje powodują błąd wywołania.
-- Odczyty rekordów są odrzucane. `attricat.schema` działa dla wersji schematu tego uruchomienia, więc możesz mapować kody na identyfikatory atrybutów.
-- `selection.describe()` zwraca `scope: "blueprint"`, `count` równe 0, wersję schematu i `context_id` oraz `default_context_id` na wypadek uruchomienia akcji w kontekście domyślnym. Przy każdej zapisywanej wartości podaj kontekst.
+- `attricat-data.batch` przyjmuje tylko intencje `create` i `upsert` dla wersji schematu tego wykonania, bez tagów i metadanych systemowych, sprawdzane względem bieżących uprawnień osoby, która je rozpoczęła. Inne intencje powodują błąd wywołania.
+- Odczyty rekordów są odrzucane. `attricat.schema` działa dla wersji schematu tego wykonania, więc możesz mapować kody na identyfikatory atrybutów.
+- `selection.describe()` zwraca `scope: "blueprint"`, `count` równe 0, wersję schematu i `context_id` oraz `default_context_id` na wypadek wykonania akcji w kontekście domyślnym. Przy każdej zapisywanej wartości podaj kontekst.
 
 ## Plik wejściowy
 
@@ -133,11 +133,11 @@ Dodaj `accepts` do [akcji](/pl/extensions/client/#akcje) operacji, aby Attricat 
   "accepts": ["text/csv"], "invoke": { "operation": { "id": "import", "input": {} } } }
 ```
 
-Wymaga to `client.files.upload` i `artifacts.read`, a osoba musi mieć `records.write`. Attricat przesyła plik i rozpoczyna uruchomienie. Twój komponent otwiera go przez `artifacts.open-input("source")`, a `describe-input` podaje jego rozmiar, typ i sumę kontrolną. Przetwarzaj go partiami, a pozycję trzymaj w punkcie kontrolnym.
+Wymaga to `client.files.upload` i `artifacts.read`, a osoba musi mieć `records.write`. Attricat przesyła plik i rozpoczyna wykonanie. Twój komponent otwiera go przez `artifacts.open-input("source")`, a `describe-input` podaje jego rozmiar, typ i sumę kontrolną. Przetwarzaj go partiami, a pozycję trzymaj w punkcie kontrolnym.
 
 Attricat ustala typ na podstawie samego pliku i odrzuca plik, którego nie ma w `accepts`. PNG, JPEG, GIF, WebP, PDF, DOCX, XLSX i PPTX rozpoznaje po zawartości. Tekst nazywa rozszerzenie pliku: `text/csv`, `text/tab-separated-values`, `application/json`, `application/xml` albo `text/plain` dla pozostałych. Tekst musi być poprawnym UTF-8. Obowiązuje zwykły limit rozmiaru przesyłanych plików.
 
-Plik może wykorzystać tylko osoba, która go przesłała, dla Twojego rozszerzenia i w ciągu godziny od przesłania. Attricat usuwa go jakiś czas po zakończeniu uruchomienia, więc skopiuj to, co chcesz zachować. Plik nie jest nigdzie pokazywany w Attricat ani wyszukiwany.
+Plik może wykorzystać tylko osoba, która go przesłała, dla Twojego rozszerzenia i w ciągu godziny od przesłania. Attricat usuwa go jakiś czas po zakończeniu wykonania, więc skopiuj to, co chcesz zachować. Plik nie jest nigdzie pokazywany w Attricat ani wyszukiwany.
 
 ## Adnotacje rekordów
 

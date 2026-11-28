@@ -412,7 +412,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET` | `/rules/{id}/revisions/{version}` | Jedna rewizja. |
 | `POST` | `/rules/{id}/enable`, `/rules/{id}/disable` | Włącza lub wyłącza regułę. `/enable` przyjmuje opcjonalne `{"accept_existing_violations": true}` dla egzekwowanej reguły, której próbne wykonanie znalazło naruszenia. |
 | `POST` | `/rules/{id}/run-now` | `{"record_id": null, "dry_run": false, "idempotency_key": "…"}`. Zwykłe wykonanie wymaga włączonej reguły. Próbne wykonanie może dodać `"definition": "<yaml>"`, aby sprawdzić jeszcze niezapisaną definicję; w przeciwnym razie sprawdza bieżącą rewizję. Zwraca `202` z `id`. |
-| `GET` | `/rule-runs`, `/rule-findings` | Uruchomienia i ustalenia. Uruchomienie podaje sprawdzony `definition_hash` i `candidates_skipped`, czyli liczbę rekordów pominiętych, bo reguła nie pasuje do ich rewizji schematu. Jego pole `truncated` ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. Strony wybierasz przez `limit` i `offset`; nagłówek `x-next-offset` podaje przesunięcie następnej strony. `unresolved=true` pomija rozwiązane ustalenia. Ustalenia można też zawęzić przez `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) i `state` (`open`, `acknowledged`, `resolved`). Reguły w `GET /rules` i `GET /rules/{id}` mają pola `open_findings` i `acknowledged_findings`. `GET /rule-runs` można zawęzić przez `rule_id` i `record_id`. `scope=all_records` zostawia wykonania obejmujące wszystkie rekordy, a `scope=record` wykonania sprawdzające jeden rekord. |
+| `GET` | `/rule-runs`, `/rule-findings` | Wykonania i ustalenia. Wykonanie podaje sprawdzony `definition_hash` i `candidates_skipped`, czyli liczbę rekordów pominiętych, bo reguła nie pasuje do ich rewizji schematu. Jego pole `truncated` ma wartość `true`, gdy zatrzymało się ono na limicie rekordów, zanim sprawdziło wszystkie. Strony wybierasz przez `limit` i `offset`; nagłówek `x-next-offset` podaje przesunięcie następnej strony. `unresolved=true` pomija rozwiązane ustalenia. Ustalenia można też zawęzić przez `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` (`info`, `warning`, `error`, `critical`) i `state` (`open`, `acknowledged`, `resolved`). Reguły w `GET /rules` i `GET /rules/{id}` mają pola `open_findings` i `acknowledged_findings`. `GET /rule-runs` można zawęzić przez `rule_id` i `record_id`. `scope=all_records` zostawia wykonania obejmujące wszystkie rekordy, a `scope=record` wykonania sprawdzające jeden rekord. |
 | `GET` | `/rule-runs/{id}` | Jedno wykonanie. Próbne wykonanie dodaje `dry_run_failures`: pierwsze 50 rekordów, które by oznaczyło, każdy z `record_id`, `message` i `evidence`. |
 | `GET` | `/rule-findings/count` | `{count}` ustaleń pasujących do filtrów listy: `record_id`, `rule_id`, `blueprint_id`, `context_id`, `severity` i `state`. Bez `state` liczy otwarte i potwierdzone ustalenia; `unresolved=false` liczy wszystkie stany. |
 | `POST` | `/rule-runs/{id}/replay`, `/rule-findings/{id}/acknowledge` | Ponawia martwą wiadomość; potwierdza ustalenie. |
@@ -423,9 +423,9 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET`, `POST` | `/workflows`, `/workflows/{id}/versions` | Wyświetla lub tworzy przepływy pracy i ich wersje. |
 | `GET` | `/workflows/{id}`, `/workflows/{id}/versions/{version}` | Jeden przepływ pracy lub jedna z jego wersji. |
 | `POST` | `/workflows/{id}/versions/{version}/publish`, `/enable`; `/workflows/{id}/disable` | Cykl życia. |
-| `POST` | `/workflows/{id}/run-now` | Uruchomienie ręczne. |
-| `GET` | `/workflow-runs` | Historia uruchomień. `workflow_id` ogranicza ją do jednego przepływu pracy. |
-| `GET` | `/workflow-runs/summary` | Dla każdego przepływu pracy `dead_letters`, `latest_status` i `latest_created_at`, liczone ze wszystkich jego uruchomień. |
+| `POST` | `/workflows/{id}/run-now` | Wykonanie ręczne. |
+| `GET` | `/workflow-runs` | Historia wykonań. `workflow_id` ogranicza ją do jednego przepływu pracy. |
+| `GET` | `/workflow-runs/summary` | Dla każdego przepływu pracy `dead_letters`, `latest_status` i `latest_created_at`, liczone ze wszystkich jego wykonań. |
 | `GET` | `/workflow-runs/{id}/targets` | Wyniki akcji `referencing_records_update` dla poszczególnych rekordów. |
 | `POST` | `/workflow-runs/{id}/replay` | Ponawia martwą wiadomość. |
 
@@ -439,7 +439,7 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `PUT` | `/agent/conversations/{id}/auto-approval` | `{"enabled": true}` sprawia, że zmiany agenta w rozmowie o rekordzie są zatwierdzane automatycznie w Twoim imieniu. Włączenie wymaga `records.write` dla rekordu; wyłączyć może każdy, kto może odczytać rozmowę. |
 | `GET`, `POST` | `/agent/conversations/{id}/messages` | Wiadomości. Wysłanie wiadomości rozpoczyna wykonanie i zwraca `202`. |
 | `POST` | `/agent/conversations/{id}/uploads` | Przesyła załącznik. |
-| `GET` | `/agent/conversations/{id}/runs` | Uruchomienia. |
+| `GET` | `/agent/conversations/{id}/runs` | Wykonania. |
 | `GET` | `/agent/runs/{run_id}` | Jedno wykonanie i jego status. |
 | `GET` | `/agent/runs/{run_id}/events` | Zdarzenia wysyłane przez serwer (SSE). Połącz ponownie z `Last-Event-ID`. |
 | `GET` | `/agent/approvals` | Oczekujące zatwierdzenia. |
@@ -498,9 +498,9 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `GET`, `PUT` | `/workspace/extension-layout` | Układ kontrybucji. |
 | `GET`, `PUT`, `DELETE` | `/extensions/{id}/secrets[/{name}]` | Sekrety rozszerzenia: przy odczycie deklarowane i ustawione, tylko z nazwami; wartości tylko do zapisu. Wymaga `extensions.manage`, także do odczytu. |
 | `POST` | `/extensions/{id}/operations` | Rozpoczyna operację. `{"operation_id", "input", "idempotency_key", "source_reference"?, "destination_reference"?}`. Zwraca `202` z `id`. |
-| `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Uruchomienia, wyniki, dostarczenia. |
+| `GET` | `/extension-operation-runs[/{id}]`, `…/artifacts`, `…/deliveries` | Wykonania, wyniki, dostarczenia. |
 | `GET` | `/extension-operation-runs/{id}/artifacts/{artifact_id}/download` | Pobiera wynik. |
-| `POST` | `/extension-operation-runs/{id}/cancel`, `…/replay` | Anuluje uruchomienie (`204`) lub je ponawia (`202`). |
+| `POST` | `/extension-operation-runs/{id}/cancel`, `…/replay` | Anuluje wykonanie (`204`) lub je ponawia (`202`). |
 | `POST`, `GET`, `PATCH` | `/extensions/{id}/operation-schedules`, `/extension-operation-schedules[/{id}]` | Harmonogramy. |
 | `POST` | `/extensions/{id}/{contribution_id}/operations` | Rozpoczyna interaktywną operację z akcji lub okna dialogowego na wybranych rekordach: `{"release_id", "operation_id", "input", "idempotency_key", "input_file_id"?, "selection": {"blueprint_id", "blueprint_version", "context_id", "record_ids"}}`. Zwraca `202` z `run_id`. |
 | `POST` | `/extensions/{id}/{contribution_id}/command` | Uruchamia polecenie zainstalowanego rozszerzenia: `{"release_id", "command_id", "payload"}`. Wymaga `records.write`. |
@@ -538,8 +538,8 @@ Trasy `GET` reguł, wykonań i ustaleń wymagają `rules.read`; pozostałe trasy
 | `POST` | `/solution-packs/plans/{id}/apply` | Stosuje plan. |
 | `GET` | `/solution-packs/applications[/{id}]` | Historia zastosowań. |
 | `POST` | `/solution-packs/applications/{id}/abandon` | Trwale zatrzymuje niedokończone zastosowanie z danymi przykładowymi. Zobacz [Pakiety rozwiązań](/pl/builders/solution-packs/). |
-| `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Uruchomienia kontroli. |
-| `GET` | `/solution-packs/applications/{id}/checks/{run_id}` | Jedno uruchomienie kontroli. |
+| `GET`, `POST` | `/solution-packs/applications/{id}/checks` | Wykonania kontroli. |
+| `GET` | `/solution-packs/applications/{id}/checks/{run_id}` | Jedno wykonanie kontroli. |
 | `GET` | `/presentation-assets[/{id}[/content]]` | Zasoby prezentacyjne. |
 
 ### Dostawca tożsamości

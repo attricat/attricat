@@ -108,7 +108,7 @@ Zmiany w katalogu tworzą wewnętrzne zdarzenia, które konsumują przepływy pr
    Każdy wpis zawiera identyfikatory konsumenta i zdarzenia, nazwę konsumenta, typ zdarzenia, liczbę prób, czas niepowodzenia i ostatni błąd.
 
 2. Usuń przyczynę: w rozszerzeniu, w zewnętrznej zależności lub w danych.
-3. Upewnij się, że ponowne uruchomienie procedury obsługi jest bezpieczne.
+3. Upewnij się, że ponowne wykonanie procedury obsługi jest bezpieczne.
 4. Ponów dostarczenie (wymaga `roles.manage`):
 
    ```sh
@@ -117,7 +117,7 @@ Zmiany w katalogu tworzą wewnętrzne zdarzenia, które konsumują przepływy pr
 
 Ponowienie dostarczenia reguły lub przepływu pracy nie zeruje licznika prób, więc jeśli znów się nie powiedzie, od razu wraca do martwych wiadomości. Dostarczenie do rozszerzenia zaczyna od nowa z pięcioma próbami. Nie ponawiaj wielokrotnie tego samego dostarczenia bez usunięcia przyczyny.
 
-Uruchomienia reguł i przepływów pracy oraz operacje rozszerzeń mają własne martwe wiadomości i polecenia ponawiania; zobacz [Reguły](/pl/builders/rules/), [Przepływy pracy](/pl/builders/workflows/) i [Operacje](/pl/extensions/operations/).
+Wykonania reguł i przepływów pracy oraz operacje rozszerzeń mają własne martwe wiadomości i polecenia ponawiania; zobacz [Reguły](/pl/builders/rules/), [Przepływy pracy](/pl/builders/workflows/) i [Operacje](/pl/extensions/operations/).
 
 ## Ponawianie przetwarzania plików
 

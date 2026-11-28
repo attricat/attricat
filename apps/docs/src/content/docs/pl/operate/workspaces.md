@@ -157,7 +157,7 @@ curl -X POST "$ATTRICAT_API_URL/files/<file-id>/retention-holds" \
 
 **Zarządzanie → Aktywność / dziennik audytu** wyświetla każdą udaną zmianę w obszarze roboczym: kto ją wykonał (osoba, token lub agent), co się zmieniło, kiedy oraz identyfikator żądania. Filtruj według czasu, wykonawcy, kategorii działania, typu obiektu lub tego, czy zmianę wprowadziła osoba, czy agent.
 
-Wpisy audytu nigdy nie zawierają haseł, tokenów ani sekretów. Zmiany wprowadzone przez agenta pokazują uruchomienie agenta, narzędzie i osobę, która je zatwierdziła. Nieudane lub odrzucone żądania nie są rejestrowane, ponieważ niczego nie zmieniły.
+Wpisy audytu nigdy nie zawierają haseł, tokenów ani sekretów. Zmiany wprowadzone przez agenta pokazują wykonanie agenta, narzędzie i osobę, która je zatwierdziła. Nieudane lub odrzucone żądania nie są rejestrowane, ponieważ niczego nie zmieniły.
 
 Odczyt dziennika audytu wymaga uprawnienia `audit.read`.
 

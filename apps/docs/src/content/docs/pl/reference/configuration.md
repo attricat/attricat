@@ -127,7 +127,7 @@ Czas trwania sesji (osiem godzin), limit prób logowania (pięć niepowodzeń na
 
 ## Praca w tle
 
-API uruchamia proces roboczy zadań dla uruchomień agentów, reguł i przepływów pracy, dostarczania zdarzeń do rozszerzeń, operacji rozszerzeń oraz migracji schematów. Uruchamia także dyspozytor zdarzeń, który dostarcza wewnętrzne zdarzenia domenowe do ich procedur obsługi.
+API uruchamia proces roboczy zadań dla wykonań agentów, reguł i przepływów pracy, dostarczania zdarzeń do rozszerzeń, operacji rozszerzeń oraz migracji schematów. Uruchamia także dyspozytor zdarzeń, który dostarcza wewnętrzne zdarzenia domenowe do ich procedur obsługi.
 
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
@@ -153,14 +153,14 @@ Co minutę API usuwa w małych partiach stare dane operacyjne: zakończoną prac
 | `RETENTION_SWEEP_BUDGET_SECONDS` | `10` | Najdłuższy czas jednego czyszczenia, od 1 do 3600 sekund i nie dłużej niż odstęp. |
 | `RETENTION_BATCH_ROWS` | `1000` | Najwięcej wierszy usuwanych z tabeli w jednej transakcji, od 1 do 10000. Każda instrukcja musi zakończyć się w ciągu 2 sekund, więc najpierw zwiększ limit czasu wykonania. |
 | `ATTRIBUTE_VALUE_HISTORY_RETENTION_DAYS` | `90` | Wcześniejsze wartości atrybutów. Bieżące wartości nigdy nie są usuwane. |
-| `TASK_RETENTION_DAYS` | `7` | Wpisy zakończonych zadań w tle. Ostatnia nieudana próba zostaje do usunięcia jej uruchomienia, aby można ją było ponowić. |
+| `TASK_RETENTION_DAYS` | `7` | Wpisy zakończonych zadań w tle. Ostatnia nieudana próba zostaje do usunięcia jej wykonania, aby można ją było ponowić. |
 | `RULE_RUN_RECORD_RETENTION_DAYS` | `7` | Zakończone sprawdzenia reguł dla pojedynczego rekordu. |
-| `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne uruchomienia reguł oraz nieudane uruchomienia. Każda rewizja reguły zachowuje swoje ostatnie uruchomienie, a każda definicja reguły swoje ostatnie ukończone pełne próbne wykonanie, więc ponowne włączenie reguły nie wymaga nowego próbnego wykonania. |
-| `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Zakończone uruchomienia przepływów pracy. |
+| `RULE_RUN_RETENTION_DAYS` | `90` | Zakończone pełne wykonania reguł oraz nieudane wykonania. Każda rewizja reguły zachowuje swoje ostatnie wykonanie, a każda definicja reguły swoje ostatnie ukończone pełne próbne wykonanie, więc ponowne włączenie reguły nie wymaga nowego próbnego wykonania. |
+| `WORKFLOW_RUN_RETENTION_DAYS` | `90` | Zakończone wykonania przepływów pracy. |
 | `EXTENSION_OPERATION_RUN_RETENTION_DAYS` | `90` | Zakończone operacje rozszerzeń, których wyniki już wygasły. |
-| `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Strumień postępu zakończonych uruchomień agentów. Rozmowy, ich wiadomości i wywołania narzędzi zostają. |
+| `AGENT_RUN_EVENT_RETENTION_DAYS` | `90` | Strumień postępu zakończonych wykonań agentów. Rozmowy, ich wiadomości i wywołania narzędzi zostają. |
 | `FILE_PROCESSING_JOB_RETENTION_DAYS` | `30` | Zakończone zadania odczytu metadanych plików. Zadania usuwania plików zostają. |
-| `SOLUTION_PACK_CHECK_RUN_RETENTION_DAYS` | `90` | Ręczne uruchomienia sprawdzeń pakietów rozwiązań. Każde zastosowanie zachowuje sprawdzenie po zastosowaniu i ostatnie sprawdzenie. |
+| `SOLUTION_PACK_CHECK_RUN_RETENTION_DAYS` | `90` | Ręczne wykonania sprawdzeń pakietów rozwiązań. Każde zastosowanie zachowuje sprawdzenie po zastosowaniu i ostatnie sprawdzenie. |
 | `DOMAIN_EVENT_RETENTION_DAYS` | `90` | Zdarzenia odebrane przez wszystkie procedury obsługi i rozszerzenia. Zdarzenia z niedostarczonym lub nieudanym dostarczeniem zostają, więc nieudane dostarczenia zawsze można powtórzyć. Rozszerzenie, które wznawia kanał zmian od kursora starszego niż usunięte zdarzenia, otrzymuje błąd wygaśnięcia kursora i musi pobrać nową migawkę. Procedura obsługi lub rozszerzenie, które już nie działa, wstrzymuje czyszczenie w swoim obszarze roboczym, dopóki nie zostanie usunięte. |
 | `BROWSER_SESSION_RETENTION_DAYS` | `7` | Wygasłe i wylogowane sesje przeglądarki. |
 | `USER_ACTION_TOKEN_RETENTION_DAYS` | `7` | Wykorzystane lub wygasłe linki weryfikacji e-mail i ustawienia hasła. |
@@ -236,10 +236,10 @@ Agenci są wyłączeni, dopóki nie podasz [sekretu](#sekrety) `llm_api_key`. Re
 | Zmienna | Domyślnie | Opis |
 | --- | --- | --- |
 | `LLM_BASE_URL` | `https://api.openai.com/v1` | Bezwzględny bazowy adres URL API Chat Completions. |
-| `LLM_MODEL` | `gpt-4o-mini` | Identyfikator modelu. Zapisywany przy każdym uruchomieniu. |
+| `LLM_MODEL` | `gpt-4o-mini` | Identyfikator modelu. Zapisywany przy każdym wykonaniu. |
 | `LLM_REASONING_EFFORT` | Nieustawiona | Opcjonalny `reasoning_effort` wysyłany z każdym żądaniem. Niektóre modele odrzucają narzędzia funkcyjne, chyba że ma on wartość `none`. |
 | `LLM_REQUEST_TIMEOUT_SECONDS` | `60` | Limit czasu jednego żądania do dostawcy, od 1 do 3600. |
-| `LLM_RUN_TIMEOUT_SECONDS` | `300` | Limit czasu całego uruchomienia agenta, od 1 do 3600. |
+| `LLM_RUN_TIMEOUT_SECONDS` | `300` | Limit czasu całego wykonania agenta, od 1 do 3600. |
 | `LLM_MAX_TOOL_ROUNDS` | `25` | Ile razy agent może wywołać narzędzia i kontynuować, zanim się zatrzyma; licznik zaczyna się od nowa po każdym zatwierdzeniu. Od 1 do 100. |
 
 Te limity agentów są stałe: 32 KiB na wiadomość użytkownika, 16 załączników na wiadomość, 5 MiB na obraz osadzony w wiadomości, 64 KiB na zserializowany wynik narzędzia i 32 wywołania narzędzi na odpowiedź dostawcy.

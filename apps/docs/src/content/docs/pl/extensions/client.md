@@ -47,8 +47,8 @@ Ramka pozostaje zamontowana, gdy użytkownik przełącza kontekst lub motyw. Nas
 | `attricat.refresh({ target: 'current_record' })` | `client.refresh` | Ponownie ładuje widoki bieżącego rekordu po zmianie wprowadzonej przez Twoje polecenie. Dostępne w miejscach osadzenia na stronach rekordów. |
 | `attricat.dialog.close()` | `client.action_dialog` | Zamyka okno. Dostępne tylko wewnątrz okna akcji; okna otwiera host, gdy użytkownik wybierze [akcję](#akcje). |
 | `attricat.operations.start({ operation_id, input, idempotency_key })` | `client.operations.start` | Uruchamia [operację interaktywną](/pl/extensions/operations/#operacje-interaktywne) dla rekordów akcji, która otworzyła okno, i zwraca `{ run_id }`. Dostępne tylko w oknie akcji. |
-| `attricat.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Tylko uruchomienia tego rozszerzenia rozpoczęte przez zalogowanego użytkownika, także gdy jest on operatorem. Pobieranie wykonuje host. |
-| `attricat.operations.cancel({ run_id })` | `client.operations.cancel` | Anuluje jedno z tych uruchomień. |
+| `attricat.operations.list()` / `get({ run_id })` / `download({ run_id, artifact_id })` | `client.operations.read` | Tylko wykonania tego rozszerzenia rozpoczęte przez zalogowanego użytkownika, także gdy jest on operatorem. Pobieranie wykonuje host. |
+| `attricat.operations.cancel({ run_id })` | `client.operations.cancel` | Anuluje jedno z tych wykonań. |
 
 | Zdarzenie na `root` | Wymaga | Wywoływane |
 | --- | --- | --- |
@@ -157,7 +157,7 @@ Akcja to pozycja menu lub przycisk, które Attricat rysuje sam. Deklarujesz jej 
 
 | Pole opcjonalne | Działanie |
 | --- | --- |
-| `when` | Zawęża miejsca, w których akcja jest oferowana, ponad widoki schematów, które ją wymieniają: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i uruchomienia akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. Akcja `explorer_action` nie wskazuje rekordów, więc nie może użyć `requires_write`. |
+| `when` | Zawęża miejsca, w których akcja jest oferowana, ponad widoki schematów, które ją wymieniają: `blueprints` (kody), `min_records`, `max_records` (najwyżej 50), `has_tags`, `missing_tags`, `requires_write`. Attricat odrzuca też polecenia i wykonania akcji z `requires_write` dla rekordów, których użytkownik nie może zmieniać. Akcja `explorer_action` nie wskazuje rekordów, więc nie może użyć `requires_write`. |
 | `confirm` | `{ "message", "destructive" }`: Attricat pyta przed uruchomieniem akcji. |
 | `accepts` | Typy pliku, o który Attricat poprosi przed rozpoczęciem akcji operacji, np. `["text/csv"]`; najwyżej 16. Zobacz [Plik wejściowy](/pl/extensions/operations/#plik-wejściowy). |
 | `icon` | Jedna z `alert`, `calculator`, `check`, `clock`, `download`, `file`, `info`, `link`, `refresh`, `search`, `send`, `settings`, `sparkles`, `tag`, `wand`. |
@@ -205,10 +205,10 @@ Odpowiedź polecenia może powiedzieć Attricat, co zrobić dalej; pozostałe po
 | `notification` | `{ "message", "severity" }` wyświetlane jako powiadomienie. |
 | `refresh` | `true` ponownie ładuje widoki rekordów akcji i wyniki przeglądarki rekordów. |
 | `navigate` | `{ "record_id" }` otwiera rekord; `{ "route" }` otwiera jedną z Twoich stron. |
-| `download` | `{ "run_id", "artifact_id" }` pobiera wynik jednego z uruchomień Twojego rozszerzenia przez użytkownika. |
+| `download` | `{ "run_id", "artifact_id" }` pobiera wynik jednego z wykonań Twojego rozszerzenia przez użytkownika. |
 | `open_dialog` | ID jednego z Twoich okien, otwieranego z tym samym kontekstem. |
 
-Attricat pokazuje, że polecenie trwa, a jeśli się nie powiedzie, podaje, która akcja zawiodła. Akcja operacji lub okno, które uruchamia operację, dostaje powiadomienie o jej zakończeniu, a rekordy uruchomienia są ponownie ładowane.
+Attricat pokazuje, że polecenie trwa, a jeśli się nie powiedzie, podaje, która akcja zawiodła. Akcja operacji lub okno, które uruchamia operację, dostaje powiadomienie o jej zakończeniu, a rekordy wykonania są ponownie ładowane.
 
 ### Okno akcji
 
@@ -216,7 +216,7 @@ Attricat pokazuje, że polecenie trwa, a jeśli się nie powiedzie, podaje, któ
 | --- | --- | --- | --- |
 | `action_dialog` | `dialog` | `client.action_dialog` | Kontekst akcji, która je otworzyła, utrwalony w chwili otwarcia. |
 
-Kontrybucja `dialog` wymaga pola `title`, a rozszerzenie może mieć kilka okien. Host rysuje okno wokół Twojej ramki, pokazuje, ilu rekordów dotyczy, i ostrzega o niezapisanych zmianach. Okno pozostaje otwarte po zamknięciu menu wiersza lub zmianie zaznaczenia i zamyka się przy nawigacji. Naciśnięcia klawiszy w Twojej ramce nie docierają do hosta, więc wywołaj `attricat.dialog.close()`, gdy użytkownik naciśnie Escape. Zamknięcie przed uruchomieniem niczego nie tworzy; zamknięcie później nie anuluje uruchomienia.
+Kontrybucja `dialog` wymaga pola `title`, a rozszerzenie może mieć kilka okien. Host rysuje okno wokół Twojej ramki, pokazuje, ilu rekordów dotyczy, i ostrzega o niezapisanych zmianach. Okno pozostaje otwarte po zamknięciu menu wiersza lub zmianie zaznaczenia i zamyka się przy nawigacji. Naciśnięcia klawiszy w Twojej ramce nie docierają do hosta, więc wywołaj `attricat.dialog.close()`, gdy użytkownik naciśnie Escape. Zamknięcie przed uruchomieniem niczego nie tworzy; zamknięcie później nie anuluje wykonania.
 
 ### Schematy
 

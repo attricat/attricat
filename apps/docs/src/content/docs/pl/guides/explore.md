@@ -131,13 +131,13 @@ Menu **Akcje** działa na zaznaczeniu:
 
 Okno wyboru relacji na stronie rekordu może otworzyć Przeglądarkę w nowej karcie, aby wybrać cele; zobacz [Relacje](/pl/guides/records/#relacje). Ta karta zaczyna w trybie zaznaczania dla schematu docelowego, a pasek nad tabelą przekazuje zaznaczone rekordy przyciskiem **Dodaj zaznaczone rekordy**, a **Utwórz** dodaje do zaznaczenia nowy rekord. Zapisywanie zaznaczenia jako wyszukiwania, wysyłanie go do agenta i inne akcje na zaznaczeniu nie są tam dostępne.
 
-## Akcje i uruchomienia rozszerzeń
+## Akcje i wykonania rozszerzeń
 
 Rozszerzenie może udostępnić akcję, na przykład generowanie dokumentów, w podglądzie rekordu, w menu wiersza lub dla bieżącego zaznaczenia. Takie akcje zawsze używają zapisanych danych. Jeśli w tej samej karcie przeglądarki masz niezapisane zmiany zaznaczonego rekordu, okno akcji o tym informuje i prowadzi do edytora, abyś mógł je najpierw zapisać.
 
-Uruchomienie akcji tworzy zadanie działające w tle. Możesz zamknąć okno lub opuścić stronę; uruchomienie trwa dalej, a po jego zakończeniu zobaczysz powiadomienie. Otwórz **Profil → Uruchomienia rozszerzeń**, aby śledzić swoje uruchomienia, anulować trwające i pobrać ich wyniki. Status pokazuje, czy uruchomienie się zakończyło; rozszerzenie osobno podaje, ile rekordów przetworzono pomyślnie, ile się nie udało, a ile pominięto.
+Wykonanie akcji tworzy zadanie działające w tle. Możesz zamknąć okno lub opuścić stronę; wykonanie trwa dalej, a po jego zakończeniu zobaczysz powiadomienie. Otwórz **Profil → Wykonania rozszerzeń**, aby śledzić swoje wykonania, anulować trwające i pobrać ich wyniki. Status pokazuje, czy wykonanie się zakończyło; rozszerzenie osobno podaje, ile rekordów przetworzono pomyślnie, ile się nie udało, a ile pominięto.
 
-Twoje uruchomienia widzisz tylko Ty oraz członkowie zarządzający rozszerzeniami. Wyniki możesz pobrać tylko wtedy, gdy nadal masz dostęp do odczytu każdego rekordu z uruchomienia. Wyniki są dostępne po zakończeniu uruchomienia i przechowywane przez 30 dni.
+Twoje wykonania widzisz tylko Ty oraz członkowie zarządzający rozszerzeniami. Wyniki możesz pobrać tylko wtedy, gdy nadal masz dostęp do odczytu każdego rekordu z wykonania. Wyniki są dostępne po zakończeniu wykonania i przechowywane przez 30 dni.
 
 ## Otwieranie rekordu
 

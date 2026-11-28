@@ -12,8 +12,8 @@ Twoja skrzynka zbiera powiadomienia o sprawach, które dotyczą Cię w bieżący
 | **Przypisanie do rekordu** | Ktoś przypisuje Ciebie lub Twój zespół do rekordu przez atrybut użytkownika lub zespołu. Zapisanie rekordu bez zmiany przypisania nie wysyła kolejnego powiadomienia. |
 | **Nowy komentarz** | Ktoś komentuje rekord, do którego masz przypisanie (bezpośrednio lub przez zespół) albo pod którym jest już Twój komentarz. Powiadomienie pokazuje początek komentarza. |
 | **Wzmianka w komentarzu** | Ktoś wspomina o Tobie w komentarzu albo edytuje swój komentarz, dodając wzmiankę o Tobie. Dostajesz wtedy to powiadomienie zamiast *Nowego komentarza*. |
-| **Agent czeka na zatwierdzenie** | Uruchomienie agenta rozpoczęte przez Ciebie czeka na zatwierdzenie zmiany. |
-| **Błąd pracy agenta** | Uruchomienie agenta rozpoczęte przez Ciebie zakończyło się błędem lub zostało przerwane. |
+| **Agent czeka na zatwierdzenie** | Wykonanie agenta rozpoczęte przez Ciebie czeka na zatwierdzenie zmiany. |
+| **Błąd pracy agenta** | Wykonanie agenta rozpoczęte przez Ciebie zakończyło się błędem lub zostało przerwane. |
 | **Dodanie do zespołu** | Ktoś dodaje Cię do zespołu. |
 | **Przyjęte zaproszenie** | Osoba zaproszona przez Ciebie dołącza do obszaru roboczego. |
 | **Reguła już nie pasuje** | Ktoś publikuje rewizję schematu, do której nie pasuje włączona [reguła jakości danych](/pl/builders/rules/#reguły-i-rewizje-schematu), więc reguła pomija jej rekordy. Trafia do członków z uprawnieniem `rules.manage`; otwiera regułę. |

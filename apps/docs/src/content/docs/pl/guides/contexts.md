@@ -44,7 +44,7 @@ Kontekst `default` zawsze ma identyfikator `00000000-0000-4000-8000-000000000001
 
 Możesz przenieść kontekst pod inny kontekst nadrzędny za pomocą `acli context update <context-id> --parent-id <parent-id> --data <metadata-json>` lub [API](/pl/reference/api/); strona **Konteksty** tylko tworzy i usuwa konteksty. Zanim przeniesienie zostanie zapisane, Attricat sprawdza każdy rekord względem jego nowego łańcucha dziedziczenia. Jeśli którykolwiek rekord stałby się nieprawidłowy, na przykład przez utratę wymaganej wartości, przeniesienie zostaje odrzucone.
 
-Nie można usunąć kontekstu, który ma konteksty podrzędne, wartości lub uruchomienia rozszerzeń, ani kontekstu `default`.
+Nie można usunąć kontekstu, który ma konteksty podrzędne, wartości lub wykonania rozszerzeń, ani kontekstu `default`.
 
 ## Praca w kontekście
 

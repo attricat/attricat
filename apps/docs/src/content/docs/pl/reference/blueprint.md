@@ -977,7 +977,7 @@ connector_jobs:
     input: {}
 ```
 
-Zadania są sprawdzane względem włączonego rozszerzenia podczas publikacji wersji; nieprawidłowe zadanie blokuje publikację. Zadanie usunięte w późniejszej wersji zostaje wyłączone, a jego historia uruchomień jest zachowywana. Zadanie eksportu uruchamia się raz dla każdego włączonego kanału eksportu i eksportuje tylko rekordy opublikowane w tym kanale. Zobacz [Operacje i konektory](/pl/extensions/operations/).
+Zadania są sprawdzane względem włączonego rozszerzenia podczas publikacji wersji; nieprawidłowe zadanie blokuje publikację. Zadanie usunięte w późniejszej wersji zostaje wyłączone, a jego historia wykonań jest zachowywana. Zadanie eksportu uruchamia się raz dla każdego włączonego kanału eksportu i eksportuje tylko rekordy opublikowane w tym kanale. Zobacz [Operacje i konektory](/pl/extensions/operations/).
 
 ## Limity i błędy
 

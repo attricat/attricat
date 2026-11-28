@@ -34,10 +34,10 @@ Agent działa w Twoim imieniu. Widzi i zmienia tylko to, na co pozwala Twoja rol
 - wyszukiwać użytkowników i zespoły obszaru roboczego, aby wypełnić atrybuty użytkownika lub zespołu;
 - wyszukiwać rekordy i odczytywać zapisane wyszukiwania;
 - wyświetlać podgląd migracji rekordu lub schematu;
-- odczytywać stan danych, ustalenia i uruchomienia reguł, uruchomienia przepływów pracy oraz definicje reguł i przepływów pracy;
+- odczytywać stan danych, ustalenia i wykonania reguł, wykonania przepływów pracy oraz definicje reguł i przepływów pracy;
 - sprawdzać roboczą definicję reguły lub przepływu pracy;
 - oglądać obrazy i odczytywać pliki tekstowe, PDF, Word i Excel w obszarze roboczym;
-- odczytywać uruchomienia operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
+- odczytywać wykonania operacji rozszerzeń i zadania konektorów (z uprawnieniem `extensions.manage`);
 - wyjaśniać przejścia statusów encji, jej zatwierdzenia i blokady retencji;
 - odczytywać komentarze rekordu;
 - odczytywać Twoje [powiadomienia](/pl/guides/inbox/).
@@ -112,7 +112,7 @@ Zmiany wprowadzone przez agenta przechodzą tę samą walidację co Twoje edycje
 
 ## Gdzie widać zmiany
 
-Zmiany wprowadzone przez agenta są audytowane tak samo jak Twoje edycje. Na stronie **Zmiany** rekordu oraz w **Zarządzanie → Aktywność / dziennik audytu** widać uruchomienie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
+Zmiany wprowadzone przez agenta są audytowane tak samo jak Twoje edycje. Na stronie **Zmiany** rekordu oraz w **Zarządzanie → Aktywność / dziennik audytu** widać wykonanie agenta, narzędzie, decyzję o zatwierdzeniu i osobę, która zatwierdziła zmianę.
 
 ## Dane wysyłane do dostawcy
 

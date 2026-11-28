@@ -50,7 +50,7 @@
     "skipToContent": "Przejdź do głównej treści",
     "loading": "Ładowanie",
     "findings": "Ustalenia",
-    "runs": "Uruchomienia"
+    "runs": "Wykonania"
   },
   "errors": {
     "requestFailed": "Żądanie nie powiodło się ({{status}})",
@@ -387,8 +387,8 @@
     "showProposedInput": "Pokaż proponowane dane wejściowe JSON",
     "approve": "Zatwierdź",
     "reject": "Odrzuć",
-    "runStatus": "Stan uruchomienia",
-    "loadingRunStatus": "Wczytywanie stanu uruchomienia",
+    "runStatus": "Stan wykonania",
+    "loadingRunStatus": "Wczytywanie stanu wykonania",
     "message": "Wiadomość",
     "messagePlaceholder": "Poproś agenta o pomoc z katalogiem…",
     "addFiles": "Dodaj pliki",
@@ -503,7 +503,7 @@
     "defaultContext": "Domyślny",
     "deleteContext": "Usuń kontekst",
     "deleteNamedContext": "Usuń kontekst {{context}}",
-    "deleteContextConfirm": "Usunąć {{context}}? Nie można usunąć kontekstu, który ma konteksty podrzędne, wartości lub uruchomienia rozszerzeń."
+    "deleteContextConfirm": "Usunąć {{context}}? Nie można usunąć kontekstu, który ma konteksty podrzędne, wartości lub wykonania rozszerzeń."
   },
   "dataHealth": {
     "title": "Stan danych",
@@ -1065,7 +1065,7 @@
     "migrationBadgeTooltip": "Rekordy są migrowane do wersji {{version}}: przetworzono {{processed}} z {{total}}. Wybierz, aby zobaczyć postęp.",
     "migrateCompatibleRecordsDescription": "Uruchom migrację w tle z wersji {{source}} do wersji {{target}}. Każdy rekord zostanie ponownie zwalidowany przed migracją.",
     "migrationImpact": "Kwalifikujące się rekordy: {{records}}. Usunięte atrybuty: {{attributes}}. {{values}} zapisanych wartości z rekordów ({{affectedRecords}}) zostanie zarchiwizowanych.",
-    "archiveRemovedValues": "Uruchomienie tej partii zatwierdza archiwizację pokazanych wyżej usuniętych wartości. Pozostaną dostępne w historii wartości.",
+    "archiveRemovedValues": "Wykonanie tej partii zatwierdza archiwizację pokazanych wyżej usuniętych wartości. Pozostaną dostępne w historii wartości.",
     "startMigration": "Rozpocznij migrację",
     "startingMigration": "Rozpoczynanie migracji…",
     "migrations": "Migracje",
@@ -1701,7 +1701,7 @@
     "all": "Wszystkie",
     "human": "Człowiek",
     "agent": "Agent",
-    "agentRunId": "Identyfikator uruchomienia agenta",
+    "agentRunId": "Identyfikator wykonania agenta",
     "toolCallId": "Identyfikator wywołania narzędzia",
     "applyFilters": "Zastosuj filtry",
     "timestamp": "Czas",
@@ -1732,7 +1732,7 @@
   "workflows": {
     "runNow": "Uruchom teraz",
     "recordId": "ID rekordu",
-    "manualRunRecordId": "ID rekordu dla ręcznego uruchomienia",
+    "manualRunRecordId": "ID rekordu dla ręcznego wykonania",
     "runRecordNotFound": "Żaden rekord nie ma tego ID albo nie masz do niego dostępu.",
     "invalidRecordId": "Wpisz poprawny ID rekordu.",
     "title": "Przepływy pracy",
@@ -1757,8 +1757,8 @@
     "enabledRevision": "Włączona wersja v{{version}}",
     "currentRevision": "Bieżąca wersja",
     "revision": "Wersja",
-    "latestRun": "Ostatnie uruchomienie",
-    "noRuns": "Brak zarejestrowanych uruchomień",
+    "latestRun": "Ostatnie wykonanie",
+    "noRuns": "Brak zarejestrowanych wykonań",
     "deadLetters_one": "{{count}} martwy list",
     "deadLetters_few": "{{count}} martwe listy",
     "deadLetters_many": "{{count}} martwych listów",
@@ -1777,7 +1777,7 @@
     },
     "compare": "Porównaj",
     "compareRevision": "Wersja do porównania",
-    "runDiagnostics": "Diagnostyka uruchomień",
+    "runDiagnostics": "Diagnostyka wykonań",
     "status": "Stan",
     "created": "Utworzono",
     "published": "Opublikowano",
@@ -1787,8 +1787,8 @@
     "completedEvidence": "Ukończono",
     "noOutcomeEvidence": "Nie zarejestrowano wyniku końcowego",
     "replay": "Odtwórz",
-    "replayRun": "Odtwórz uruchomienie martwego listu {{id}}",
-    "runsUnavailable": "Nie można było wczytać diagnostyki uruchomień: {{message}}",
+    "replayRun": "Odtwórz wykonanie martwego listu {{id}}",
+    "runsUnavailable": "Nie można było wczytać diagnostyki wykonań: {{message}}",
     "notAvailable": "Niedostępne"
   },
   "management": {
@@ -1888,7 +1888,7 @@
     "revokeTokenTitle": "Unieważnić osobisty token?",
     "revokeTokenWarning": "Skrypty i integracje korzystające z <strong>{{label}}</strong> natychmiast utracą dostęp. Tej operacji nie można cofnąć.",
     "revokeToken": "Unieważnij token",
-    "extensionRuns": "Uruchomienia rozszerzeń",
+    "extensionRuns": "Wykonania rozszerzeń",
     "singleSignOn": "Logowanie jednokrotne",
     "singleSignOnDescription": "Loguj się do tego obszaru roboczego przez jego dostawcę tożsamości.",
     "singleSignOnConnect": "Połącz z {{provider}}",
@@ -2552,7 +2552,7 @@
     "loadError": "Nie udało się wczytać stanu przetwarzania w tle. Spróbuj odświeżyć.",
     "refreshError": "Odświeżenie nie powiodło się. Wyświetlany stan może być nieaktualny.",
     "updated": "Ostatnia aktualizacja: <timestamp/> · Odświeżanie co {{seconds}} s",
-    "failures": "Niektóre zadania nie powiodły się i nie zostaną automatycznie ponowione. Sprawdź odpowiednią historię uruchomień lub skontaktuj się z administratorem.",
+    "failures": "Niektóre zadania nie powiodły się i nie zostaną automatycznie ponowione. Sprawdź odpowiednią historię wykonań lub skontaktuj się z administratorem.",
     "expiredWarning": "Niektóre uruchomione zadania mają wygasłe dzierżawy. Mogły zostać przerwane i oczekują na odzyskanie przez proces roboczy.",
     "empty": "Brak oczekujących, uruchomionych lub nieudanych zadań API w tym obszarze roboczym.",
     "kind": "Typ zadania",
@@ -2564,10 +2564,10 @@
     "seconds": "{{value}} s",
     "explanation": "Kolejka obejmuje zadania zaplanowane i ponowne próby. Najdłuższe oczekiwanie to czas od gotowości zadania do uruchomienia, bez zadań zaplanowanych na przyszłość. Wygasłe dzierżawy są uwzględnione w uruchomionych zadaniach. Jest to stan kolejki, a nie test dostępności procesów roboczych. Zadania zakończone i anulowane są pomijane.",
     "kinds": {
-      "agent": "Uruchomienia agentów",
+      "agent": "Wykonania agentów",
       "event": "Dostarczanie zdarzeń",
-      "workflow": "Uruchomienia przepływów pracy",
-      "rule": "Uruchomienia reguł",
+      "workflow": "Wykonania przepływów pracy",
+      "rule": "Wykonania reguł",
       "migration": "Partie migracji schematów",
       "extension": "Operacje rozszerzeń",
       "other": "Inne zadania"
@@ -2609,7 +2609,7 @@
     "enabled": "Włączona",
     "disabled": "Wyłączona",
     "toggleRule": "Włącz {{name}}",
-    "dryRunTruncated": "Próbne wykonanie zatrzymało się na limicie rekordów, więc nie sprawdziło wszystkich rekordów. Przed zatrzymaniem znalazło istniejące naruszenia: {{existing_violations}}. Ponowne uruchomienie nie sprawdzi ich więcej.",
+    "dryRunTruncated": "Próbne wykonanie zatrzymało się na limicie rekordów, więc nie sprawdziło wszystkich rekordów. Przed zatrzymaniem znalazło istniejące naruszenia: {{existing_violations}}. Ponowne wykonanie nie sprawdzi ich więcej.",
     "enableAnyway": "Włącz mimo to",
     "dryRun": "Próbne wykonanie",
     "runNow": "Uruchom teraz",
@@ -2724,7 +2724,7 @@
     },
     "templates": {
       "required": "Wymagana wartość",
-      "requiredDescription": "Zgłasza rekordy bez wartości przy uruchomieniu na żądanie.",
+      "requiredDescription": "Zgłasza rekordy bez wartości przy wykonaniu na żądanie.",
       "choice": "Dozwolone wartości",
       "choiceDescription": "Zgłasza rekordy z wartością spoza listy przy każdej zmianie rekordu.",
       "stale": "Data przeglądu",
@@ -3051,15 +3051,15 @@
     "commit": "Commit"
   },
   "extensionRuns": {
-    "accessLost": "Nie możesz już wyświetlić tego uruchomienia, ponieważ utracono dostęp do danych, na których działa. Może nadal trwać i możesz je zatrzymać.",
-    "cancelRequested": "Anulowanie tego uruchomienia.",
-    "description": "Praca w tle uruchomiona z akcji rozszerzeń. Uruchomienia trwają po zamknięciu akcji; tutaj możesz śledzić ich postęp i pobrać wyniki.",
+    "accessLost": "Nie możesz już wyświetlić tego wykonania, ponieważ utracono dostęp do danych, na których działa. Może nadal trwać i możesz je zatrzymać.",
+    "cancelRequested": "Anulowanie tego wykonania.",
+    "description": "Praca w tle uruchomiona z akcji rozszerzeń. Wykonania trwają po zamknięciu akcji; tutaj możesz śledzić ich postęp i pobrać wyniki.",
     "empty": "Nie uruchomiono jeszcze żadnych rozszerzeń.",
-    "viewRun": "Pokaż uruchomienie",
-    "backToRuns": "Wszystkie uruchomienia rozszerzeń",
+    "viewRun": "Pokaż wykonanie",
+    "backToRuns": "Wszystkie wykonania rozszerzeń",
     "started": "Uruchomiono rozszerzenie. Praca trwa w tle.",
-    "finished": "Uruchomienie rozszerzenia zakończone.",
-    "cancelledNotice": "Uruchomienie rozszerzenia anulowane.",
+    "finished": "Wykonanie rozszerzenia zakończone.",
+    "cancelledNotice": "Wykonanie rozszerzenia anulowane.",
     "failedNotice": "Wykonanie rozszerzenia nie powiodło się.",
     "failedNoticeWithReason": "Wykonanie rozszerzenia nie powiodło się: {{reason}}",
     "recordCount_one": "{{count}} rekord",
@@ -3067,7 +3067,7 @@
     "recordCount_many": "{{count}} rekordów",
     "wholeBlueprint": "Cały schemat",
     "recordCount_other": "{{count}} rekordów",
-    "progressLabel": "Postęp uruchomienia",
+    "progressLabel": "Postęp wykonania",
     "progress": "Przetworzono {{completed}} z {{total}}",
     "outcome": {
       "succeeded_one": "{{count}} udane",
@@ -3092,17 +3092,17 @@
       "failed": "Niepowodzenie"
     },
     "failure": {
-      "access_revoked": "Uruchomienie zatrzymano, ponieważ nie masz już dostępu do tego obszaru roboczego.",
-      "extension_failed": "Rozszerzenie nie mogło dokończyć tego uruchomienia."
+      "access_revoked": "Wykonanie zatrzymano, ponieważ nie masz już dostępu do tego obszaru roboczego.",
+      "extension_failed": "Rozszerzenie nie mogło dokończyć tego wykonania."
     },
     "outputs": "Wyniki",
-    "outputsAfterCompletion": "Wyniki będzie można pobrać po zakończeniu uruchomienia.",
+    "outputsAfterCompletion": "Wyniki będzie można pobrać po zakończeniu wykonania.",
     "outputsExpired": "Te wyniki wygasły i nie można ich już pobrać.",
     "outputsAvailableUntil": "Do pobrania do <timestamp/>.",
-    "noOutputs": "To uruchomienie nie utworzyło wyników do pobrania.",
+    "noOutputs": "To wykonanie nie utworzyło wyników do pobrania.",
     "unnamedOutput": "Wynik",
     "download": "Pobierz",
-    "cancel": "Anuluj uruchomienie"
+    "cancel": "Anuluj wykonanie"
   },
   "principals": {
     "loading": "Wczytywanie…",

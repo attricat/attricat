@@ -90,8 +90,8 @@ Wymień uprawnienia w `permissions` lub `optional_permissions`. Każde z nich ze
 | `client.refresh` | Odświeżenie bieżącego rekordu po zmianie. |
 | `client.events` | Odbieranie w ramce zdarzeń zmiany kontekstu. |
 | `client.operations.start` | Uruchamianie operacji interaktywnych rozszerzenia dla zaznaczenia ramki. |
-| `client.operations.read` | Wyświetlanie, odczyt i pobieranie wyników uruchomień tego rozszerzenia należących do użytkownika. |
-| `client.operations.cancel` | Anulowanie uruchomień tego rozszerzenia należących do użytkownika. |
+| `client.operations.read` | Wyświetlanie, odczyt i pobieranie wyników wykonań tego rozszerzenia należących do użytkownika. |
+| `client.operations.cancel` | Anulowanie wykonań tego rozszerzenia należących do użytkownika. |
 | `client.files.upload` | Proszenie użytkownika o plik, gdy wybierze [akcję, która go przyjmuje](/pl/extensions/client/#akcje). |
 
 ### Umiejscowienie w kliencie

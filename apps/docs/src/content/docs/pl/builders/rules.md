@@ -52,7 +52,7 @@ predicate:
 | `event` | `event_type` | Dla zmienionego rekordu, po jednym z: `record.created.v1`, `record.updated.v1`, `record.migrated.v1`, `attribute_value.changed.v1`, `attribute_value.restored.v1`, `relationship.changed.v1`. |
 | `post_import` | | Zarezerwowany dla przyszłej integracji z importem. |
 
-Wyzwalacze decydują, kiedy reguła sprawdza wszystkie rekordy swojego Schematu. Edycja rekordu zawsze ponownie sprawdza ten rekord względem każdej włączonej reguły jego Schematu, niezależnie od jej wyzwalaczy, więc ustalenia rekordu odpowiadają temu, co zapisano. Wyzwalacz `event` dodaje ponowne uruchomienia dla [zależnych rekordów](#zmiany-w-powiązanych-rekordach).
+Wyzwalacze decydują, kiedy reguła sprawdza wszystkie rekordy swojego Schematu. Edycja rekordu zawsze ponownie sprawdza ten rekord względem każdej włączonej reguły jego Schematu, niezależnie od jej wyzwalaczy, więc ustalenia rekordu odpowiadają temu, co zapisano. Wyzwalacz `event` dodaje ponowne wykonania dla [zależnych rekordów](#zmiany-w-powiązanych-rekordach).
 
 ### Predykaty
 
@@ -108,7 +108,7 @@ predicate:
 
 ### Wygasanie i inne kontrole zależne od czasu
 
-`relative_date` porównuje datę z chwilą uruchomienia reguły. Nadaj takiej regule wyzwalacz `schedule`: rekord, którego nikt nie edytuje, może wygasnąć w nocy, a zauważy to tylko wykonanie według harmonogramu.
+`relative_date` porównuje datę z chwilą wykonania reguły. Nadaj takiej regule wyzwalacz `schedule`: rekord, którego nikt nie edytuje, może wygasnąć w nocy, a zauważy to tylko wykonanie według harmonogramu.
 
 ```yaml
 format_version: 1
