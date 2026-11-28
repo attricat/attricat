@@ -99,9 +99,14 @@ test('side-loads the example extension and recalculates a blueprint formula', as
       .nth(1)
       .locator('span span', { hasText: text })
       .evaluate((token) => getComputedStyle(token).color);
-  expect(await tokenColor('"webhook_secret"')).not.toBe(
-    await tokenColor('"example-webhook-secret"'),
-  );
+  // Monaco colors the tokens after it renders the text, so wait for them.
+  await expect
+    .poll(
+      async () =>
+        (await tokenColor('"webhook_secret"')) !==
+        (await tokenColor('"example-webhook-secret"')),
+    )
+    .toBe(true);
   const saved = page.waitForResponse((response) =>
     response.url().endsWith('/configure'),
   );
