@@ -60,6 +60,7 @@ import {
   ExportIcon,
   ExtensionConnectionIcon,
   ExtensionIcon,
+  ExtensionFailureIcon,
   ExtensionSecretIcon,
   ExtensionWebhookIcon,
   PermissionIcon,
@@ -69,6 +70,8 @@ import { ExtensionConnectionsSection } from '../extension-exports/ExtensionConne
 import { ExtensionExportStatusSection } from '../extension-exports/ExtensionExportStatusSection';
 import { manifestExportsSchema } from '../extension-exports/schemas';
 import { ExtensionWebhooksSection } from '../extension-webhooks/ExtensionWebhooksSection';
+import { ExtensionFailuresSection } from '../extension-failures/ExtensionFailuresSection';
+import { hasBackgroundWork } from '../extension-failures/schemas';
 import { manifestWebhooks } from '../extension-webhooks/schemas';
 import { capabilities } from '../auth/capabilities';
 import { ApiErrorAlert } from '../../components/ApiErrorAlert';
@@ -82,6 +85,7 @@ const tabIcons = {
   [installedExtensionTabs.connections]: ExtensionConnectionIcon,
   [installedExtensionTabs.webhooks]: ExtensionWebhookIcon,
   [installedExtensionTabs.secrets]: ExtensionSecretIcon,
+  [installedExtensionTabs.failures]: ExtensionFailureIcon,
   [installedExtensionTabs.lifecycle]: HistoryIcon,
 } satisfies Record<InstalledExtensionTab, LucideIcon>;
 
@@ -130,7 +134,7 @@ const InstalledExtensionTabs = ({
   // The export status lists records across the workspace, so it needs
   // workspace-wide read access.
   const canReadRecords = useCan(capabilities.recordsRead);
-  const { grants, installation, lifecycle } = detail;
+  const { grants, installation } = detail;
   const pending = pendingGrants(installation.manifest, grants).length;
   const manifest = manifestExportsSchema.safeParse(installation.manifest).data;
   const webhooks = manifestWebhooks(installation.manifest);
@@ -281,9 +285,19 @@ const InstalledExtensionTabs = ({
           },
         ]
       : []),
+    // Failures name records and carry the extension's error text, so they
+    // need workspace-wide read access like the export status.
+    ...(canReadRecords && hasBackgroundWork(installation.manifest)
+      ? [
+          {
+            key: installedExtensionTabs.failures,
+            content: <ExtensionFailuresSection extensionId={extensionId} />,
+          },
+        ]
+      : []),
     {
       key: installedExtensionTabs.lifecycle,
-      content: <ExtensionLifecycleSection lifecycle={lifecycle} />,
+      content: <ExtensionLifecycleSection extensionId={extensionId} />,
     },
   ];
   // A link can name a tab this extension does not have.

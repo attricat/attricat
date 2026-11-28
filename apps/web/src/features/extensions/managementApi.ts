@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { request, requestNoContent, jsonRequest } from '../../api/request';
+import { keysetQuery, type KeysetCursor } from '../../api/keysetCursor';
 import { manualQuarantineDiagnosticCode, type GrantKind } from './constants';
 import {
   detailSchema,
+  lifecyclePageSchema,
   discoveredSchema,
   extensionUpdateSchema,
   installationSchema,
@@ -72,6 +74,13 @@ export const deleteExtensionSecret = ({
   });
 export const extensionDetail = (id: string) =>
   request(extensionPath(id), detailSchema);
+
+/** A page of the installation's lifecycle records, newest first. */
+export const extensionLifecycle = (id: string, cursor?: KeysetCursor) =>
+  request(
+    `${extensionPath(id)}/lifecycle${keysetQuery(cursor)}`,
+    lifecyclePageSchema,
+  );
 export const installExtension = (input: ExtensionReleaseReference) =>
   request(extensionsApiPath, installationSchema, jsonRequest('POST', input));
 export const sideloadExtension = (archive: File) =>

@@ -11,6 +11,7 @@ mod data_health;
 mod error;
 mod event_deliveries;
 mod extension_exports;
+mod extension_failures;
 mod extension_field_notes;
 mod extension_form_assist;
 mod extension_registries;
@@ -27,6 +28,7 @@ mod multipart_limit;
 mod notifications;
 mod oidc;
 mod operator;
+mod page_cursor;
 mod pagination;
 mod presentation_assets;
 mod record_comments;
@@ -702,6 +704,18 @@ pub fn router(state: AppState) -> Router {
         .route(
             "/extensions/{extension_id}/export-status",
             get(extension_exports::extension_export_status),
+        )
+        .route(
+            "/extensions/{extension_id}/failures/runs",
+            get(extension_failures::run_failures),
+        )
+        .route(
+            "/extensions/{extension_id}/failures/deliveries",
+            get(extension_failures::delivery_failures),
+        )
+        .route(
+            "/extensions/{extension_id}/lifecycle",
+            get(extensions::lifecycle),
         )
         .route(
             "/extensions/{extension_id}/export-status/retry",

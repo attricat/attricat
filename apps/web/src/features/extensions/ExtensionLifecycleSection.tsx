@@ -1,17 +1,25 @@
 import { Box, Divider, Paper, Stack, Typography } from '@mui/material';
+import { useInfiniteQuery } from '@tanstack/react-query';
 import { Trans, useTranslation } from 'react-i18next';
+import {
+  createdAtCursor,
+  nextKeysetCursor,
+  type KeysetCursor,
+} from '../../api/keysetCursor';
+import { ApiErrorAlert } from '../../components/ApiErrorAlert';
+import { NextPageButton } from '../../components/LoadMoreButton';
 import { UserProfileLink } from '../../components/UserProfileLink';
 import {
   lifecycleOperationLabel,
   lifecycleStateLabel,
 } from './extensionPageUtils';
-import type { ExtensionDetail } from './managementApi';
+import { extensionLifecycle } from './managementApi';
+import { extensionManagementQueryKeys } from './managementQueryKeys';
+import type { LifecycleRecord } from './schemas';
 import { Timestamp } from '../../time/Timestamp';
 import { personName } from '../../components/personName';
 import { EmptyState } from '../../components/EmptyState';
 import { ExtensionIcon } from '../../components/systemIcons';
-
-type LifecycleRecord = ExtensionDetail['lifecycle'][number];
 
 const hasDiagnostics = (diagnostics: unknown) =>
   typeof diagnostics === 'object' &&
@@ -60,18 +68,27 @@ const ExtensionLifecycleRecord = ({ record }: { record: LifecycleRecord }) => {
   );
 };
 
+/** The installation's lifecycle records, newest first, a page at a time. */
 export const ExtensionLifecycleSection = ({
-  lifecycle,
+  extensionId,
 }: {
-  lifecycle: LifecycleRecord[];
+  extensionId: string;
 }) => {
   const { t } = useTranslation();
+  const pages = useInfiniteQuery({
+    queryKey: extensionManagementQueryKeys.lifecycle(extensionId),
+    queryFn: ({ pageParam }) => extensionLifecycle(extensionId, pageParam),
+    initialPageParam: undefined as KeysetCursor | undefined,
+    getNextPageParam: (page) => nextKeysetCursor(page, createdAtCursor),
+  });
+  const lifecycle = pages.data?.pages.flatMap((page) => page.items) ?? [];
   return (
     <Paper sx={{ p: 4 }}>
       <Typography component="h2" sx={{ mb: 1 }} variant="h6">
         {t('extensions.lifecycle')}
       </Typography>
-      {lifecycle.length === 0 ? (
+      <ApiErrorAlert error={pages.error} />
+      {!pages.data ? null : lifecycle.length === 0 ? (
         <EmptyState icon={ExtensionIcon} title={t('extensions.noLifecycle')} />
       ) : (
         <Stack divider={<Divider />} spacing={1}>
@@ -80,6 +97,7 @@ export const ExtensionLifecycleSection = ({
           ))}
         </Stack>
       )}
+      <NextPageButton query={pages} sx={{ mt: 2 }} />
     </Paper>
   );
 };

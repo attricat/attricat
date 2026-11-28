@@ -19,6 +19,8 @@ export const extensionRunSchema = z.object({
   status: z.enum(extensionRunStatuses),
   progress: progressSchema,
   failure: z.enum(extensionRunFailures).nullable(),
+  /** The extension's own explanation of a failed run, shown as written. */
+  failure_message: z.string().nullable().optional(),
   can_cancel: z.boolean(),
   scope: z.enum(extensionRunSelectionScopes),
   selection_count: z.number().int().nonnegative(),

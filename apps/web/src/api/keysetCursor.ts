@@ -10,10 +10,10 @@ export const keysetQuery = (cursor?: KeysetCursor) =>
   cursor ? `?${new URLSearchParams(cursor)}` : '';
 
 /** The cursor after a page's last item, or `undefined` when none follow. */
-export const nextKeysetCursor = <T>(
+export const nextKeysetCursor = <T, C extends KeysetCursor = KeysetCursor>(
   page: { items: readonly T[]; has_more: boolean },
-  cursorOf: (item: T) => KeysetCursor,
-) => {
+  cursorOf: (item: T) => C,
+): C | undefined => {
   const last = page.items.at(-1);
   return page.has_more && last ? cursorOf(last) : undefined;
 };

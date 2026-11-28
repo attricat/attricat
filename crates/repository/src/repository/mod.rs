@@ -275,7 +275,9 @@ pub use extension_operation_schedules::{
     CreateExtensionOperationSchedule, ExtensionOperationSchedule,
 };
 pub use extension_operations::{
-    ClaimedExtensionOperationRun, ExtensionOperationRun, StartExtensionOperation,
+    ClaimedExtensionOperationRun, ExtensionOperationRun, ExtensionRunFailure,
+    RUN_DIAGNOSTIC_CODE_FIELD, RUN_DIAGNOSTIC_MESSAGE_FIELD, RUN_REJECTED_ERROR_CODE,
+    StartExtensionOperation,
 };
 pub use extension_registries::ExtensionRegistrySource;
 pub use extension_scoped_configuration::ExtensionConfigurationScope;

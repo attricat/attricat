@@ -158,6 +158,14 @@ export const ExtensionRunDetailPage = ({ runId }: { runId: string }) => {
           {run.data.failure && (
             <Alert severity="error">
               {t(`extensionRuns.failure.${run.data.failure}`)}
+              {run.data.failure_message && (
+                <Typography
+                  sx={{ mt: 0.5, overflowWrap: 'anywhere' }}
+                  variant="body2"
+                >
+                  {run.data.failure_message}
+                </Typography>
+              )}
             </Alert>
           )}
           <ExtensionRunProgress run={run.data} />

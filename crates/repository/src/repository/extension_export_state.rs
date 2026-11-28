@@ -403,6 +403,25 @@ impl AttricatRepository {
             .fetch_all(&self.pool).await?)
     }
 
+    /// Like [`Self::extension_handler_failures`], newest first from before
+    /// the `before` position of a previous page.
+    pub async fn extension_handler_failure_page(
+        &self,
+        extension_id: &str,
+        before: Option<(DateTime<Utc>, Uuid, String)>,
+        limit: i64,
+    ) -> Result<Vec<HandlerFailure>, RepositoryError> {
+        let (before_at, before_event, before_handler) = match before {
+            Some((at, event, handler)) => (Some(at), Some(event), Some(handler)),
+            None => (None, None, None),
+        };
+        Ok(sqlx::query_as("SELECT a.event_id,e.event_type,a.handler_id,a.status,a.attempts,a.error_code,a.error_message,a.record_id,a.updated_at FROM extension_handler_attempts a JOIN domain_events e ON e.id=a.event_id WHERE a.workspace_id=$1 AND a.extension_id=$2 AND a.status IN ('rejected','exhausted') AND ($3::timestamptz IS NULL OR (a.updated_at,a.event_id,a.handler_id) < ($3,$4,$5)) ORDER BY a.updated_at DESC, a.event_id DESC, a.handler_id DESC LIMIT $6")
+            .bind(self.workspace_id()).bind(extension_id)
+            .bind(before_at).bind(before_event).bind(before_handler)
+            .bind(limit.clamp(1, MAX_HANDLER_FAILURES))
+            .fetch_all(&self.pool).await?)
+    }
+
     /// When the latest event of `event_types` for `event`'s record that
     /// supersedes `event`'s debounced delivery to `extension_id` occurred, if
     /// any does. A retry request concerns one connection only, so only a later

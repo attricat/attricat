@@ -18,6 +18,7 @@ use super::{
     conditional,
     error::ApiError,
     extractors::{ApiJson, ApiPath, ApiQuery},
+    page_cursor::{Page, PageQuery},
 };
 use crate::{
     constants::DEFAULT_LIST_PAGE_SIZE,
@@ -147,7 +148,7 @@ impl From<InstalledExtension> for InstallationResponse {
     }
 }
 #[derive(Serialize)]
-struct LifecycleResponse {
+pub(super) struct LifecycleResponse {
     id: Uuid,
     operation: String,
     prior_state: Option<String>,
@@ -183,7 +184,6 @@ impl From<ExtensionLifecycleRecord> for LifecycleResponse {
 pub(super) struct ExtensionDetailResponse {
     installation: InstallationResponse,
     grants: Vec<ExtensionGrant>,
-    lifecycle: Vec<LifecycleResponse>,
 }
 
 #[derive(Deserialize)]
@@ -407,14 +407,28 @@ pub(super) async fn detail(
 ) -> Result<Json<ExtensionDetailResponse>, ApiError> {
     let installation = repository.installed_extension(&extension_id).await?;
     let grants = repository.extension_grants(&extension_id).await?;
-    let lifecycle = repository
-        .extension_lifecycle_history(&extension_id)
-        .await?;
     Ok(Json(ExtensionDetailResponse {
         installation: installation.into(),
         grants,
-        lifecycle: lifecycle.into_iter().map(Into::into).collect(),
     }))
+}
+
+/// A page of the extension's lifecycle records, newest first.
+pub(super) async fn lifecycle(
+    ScopedRepository(repository): ScopedRepository,
+    ApiPath(extension_id): ApiPath<String>,
+    ApiQuery(query): ApiQuery<PageQuery>,
+) -> Result<Json<Page<LifecycleResponse>>, ApiError> {
+    let rows = repository
+        .extension_lifecycle_page(
+            &extension_id,
+            query.before()?,
+            LIFECYCLE_PAGE_SIZE as i64 + 1,
+        )
+        .await?;
+    Ok(Json(
+        Page::from_rows(rows, LIFECYCLE_PAGE_SIZE).map(LifecycleResponse::from),
+    ))
 }
 
 async fn selected_release(
@@ -1402,6 +1416,8 @@ pub(super) async fn dev_artifact(
 
 /// How a WebAssembly component begins: the magic number, then the version and
 /// layer that distinguish it from a core module.
+/// How many lifecycle records one page lists.
+const LIFECYCLE_PAGE_SIZE: usize = 50;
 const WASM_COMPONENT_PREAMBLE: [u8; 8] = *b"\0asm\x0d\0\x01\0";
 
 /// Replaces an installed release's server component with a development build,

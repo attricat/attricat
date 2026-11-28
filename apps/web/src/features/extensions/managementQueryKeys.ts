@@ -16,4 +16,7 @@ export const extensionManagementQueryKeys = {
     [...extensionManagementQueryKeys.all, 'secrets', extensionId] as const,
   detail: (id: string) =>
     [...extensionManagementQueryKeys.all, 'detail', id] as const,
+  /** Under the detail, so whatever refreshes the installation refreshes it. */
+  lifecycle: (id: string) =>
+    [...extensionManagementQueryKeys.detail(id), 'lifecycle'] as const,
 };

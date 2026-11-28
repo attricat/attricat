@@ -2010,6 +2010,7 @@
       "connections": "Connections",
       "webhooks": "Webhooks",
       "secrets": "Secrets",
+      "failures": "Failures",
       "lifecycle": "Lifecycle"
     },
     "lifecycle": "Lifecycle and health",
@@ -3124,6 +3125,23 @@
     "filterByExport": "Export status",
     "filterChip": "{{destination}}: {{status}}",
     "removeFilter": "Remove filter {{filter}}"
+  },
+  "extensionFailures": {
+    "title": "Failures",
+    "description": "Background work of this extension that failed: operation runs, including scheduled ones, and event deliveries its handlers rejected or gave up on. Errors are the extension's own, so they are shown as it wrote them.",
+    "empty": "No failures",
+    "emptyDescription": "Failed runs and event deliveries of this extension appear here.",
+    "runs": "Operation runs",
+    "operation": "Operation",
+    "scheduled": "Started by a schedule",
+    "state": "State",
+    "states": {
+      "failed": "Failed",
+      "retrying": "Retrying"
+    },
+    "error": "Error",
+    "attempts": "Attempts",
+    "updated": "Updated"
   },
   "extensionWebhooks": {
     "title": "Webhooks",

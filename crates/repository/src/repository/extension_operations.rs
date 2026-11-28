@@ -17,6 +17,15 @@ use super::{AttricatRepository, ClaimedTask, RepositoryError, bounded_task_error
 
 const MAX_JSON_BYTES: usize = 64 * 1024;
 const MAX_IDEMPOTENCY_BYTES: usize = 128;
+/// The run error code of a typed rejection from the component.
+pub const RUN_REJECTED_ERROR_CODE: &str = "rejected";
+/// The stored run diagnostic field that names a rejection's own code.
+pub const RUN_DIAGNOSTIC_CODE_FIELD: &str = "rejection_code";
+/// The stored run diagnostic field that keeps a typed failure's text, which
+/// the component wrote for people to read.
+pub const RUN_DIAGNOSTIC_MESSAGE_FIELD: &str = "message";
+/// The most run failures one listing returns.
+const MAX_RUN_FAILURES: i64 = 200;
 
 type ClaimedOperationRunRow = (
     String,
@@ -93,6 +102,21 @@ pub struct ExtensionOperationRun {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+/// A failed run, or one retrying after a failure, for operators.
+#[derive(Clone, Debug, sqlx::FromRow)]
+pub struct ExtensionRunFailure {
+    pub id: Uuid,
+    pub operation_id: String,
+    pub status: String,
+    /// The schedule that started the run, if one did.
+    pub schedule_id: Option<Uuid>,
+    pub attempts: i32,
+    pub last_error_code: Option<String>,
+    /// The stored diagnostic; see [`ExtensionOperationRun::last_error_message`].
+    pub last_error_message: Option<String>,
+    pub updated_at: DateTime<Utc>,
+}
+
 fn bounded_object(value: &Value, name: &str) -> Result<(), RepositoryError> {
     if !value.is_object()
         || serde_json::to_vec(value).map_or(true, |bytes| bytes.len() > MAX_JSON_BYTES)
@@ -152,6 +176,31 @@ fn bounded_message(value: &str) -> String {
 }
 
 impl AttricatRepository {
+    /// The extension's dead-lettered runs and runs waiting to retry after a
+    /// failure, newest first, from before the `before` position of a
+    /// previous page.
+    pub async fn extension_run_failures(
+        &self,
+        extension_id: &str,
+        before: Option<(DateTime<Utc>, Uuid)>,
+        limit: i64,
+    ) -> Result<Vec<ExtensionRunFailure>, RepositoryError> {
+        let (before_at, before_id) = before.unzip();
+        Ok(sqlx::query_as(
+            "SELECT id, operation_id, status, schedule_id, attempts, last_error_code, last_error_message, updated_at FROM extension_operation_runs WHERE workspace_id = $1 AND extension_id = $2 AND (status = $3 OR (status IN ($4, $5) AND last_error_code IS NOT NULL)) AND ($6::timestamptz IS NULL OR (updated_at, id) < ($6, $7)) ORDER BY updated_at DESC, id DESC LIMIT $8",
+        )
+        .bind(self.workspace_id())
+        .bind(extension_id)
+        .bind(RunStatus::DeadLetter.as_str())
+        .bind(RunStatus::Pending.as_str())
+        .bind(RunStatus::Leased.as_str())
+        .bind(before_at)
+        .bind(before_id)
+        .bind(limit.clamp(1, MAX_RUN_FAILURES))
+        .fetch_all(&self.pool)
+        .await?)
+    }
+
     async fn enqueue_extension_operation_task(
         &self,
         transaction: &mut sqlx::Transaction<'_, sqlx::Postgres>,
@@ -464,8 +513,10 @@ impl AttricatRepository {
         self.for_task(task)
             .ensure_task_fence(&mut transaction)
             .await?;
+        // A committed batch has recovered from any earlier failure, so the
+        // run no longer reports one.
         let changed: Option<String> = sqlx::query_scalar(
-            "UPDATE extension_operation_runs SET checkpoint=$3,progress=$4,lifecycle_started=true,batch_number=batch_number+1,deferrals=0,status=CASE WHEN cancellation_requested AND cancellation_delivered THEN 'cancelled' WHEN cancellation_requested THEN 'pending' WHEN $5 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $5 AND NOT cancellation_requested THEN clock_timestamp() ELSE completed_at END,cancelled_at=CASE WHEN cancellation_requested AND cancellation_delivered THEN clock_timestamp() ELSE cancelled_at END,resume_at=$7,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$6 RETURNING status",
+            "UPDATE extension_operation_runs SET checkpoint=$3,progress=$4,lifecycle_started=true,batch_number=batch_number+1,deferrals=0,status=CASE WHEN cancellation_requested AND cancellation_delivered THEN 'cancelled' WHEN cancellation_requested THEN 'pending' WHEN $5 THEN 'completed' ELSE 'pending' END,completed_at=CASE WHEN $5 AND NOT cancellation_requested THEN clock_timestamp() ELSE completed_at END,cancelled_at=CASE WHEN cancellation_requested AND cancellation_delivered THEN clock_timestamp() ELSE cancelled_at END,resume_at=$7,last_error_code=NULL,last_error_message=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$6 RETURNING status",
         )
         .bind(run.id)
         .bind(self.workspace_id())
@@ -693,12 +744,13 @@ impl AttricatRepository {
             .ensure_task_fence(&mut transaction)
             .await?;
         let changed = sqlx::query(
-            "UPDATE extension_operation_runs SET status='dead_letter',last_error_code='rejected',last_error_message=$3,resume_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$4",
+            "UPDATE extension_operation_runs SET status='dead_letter',last_error_code=$5,last_error_message=$3,resume_at=NULL,lease_token=NULL,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp() WHERE id=$1 AND workspace_id=$2 AND status='leased' AND lease_token=$4",
         )
         .bind(task.subject_id)
         .bind(self.workspace_id())
         .bind(&error)
         .bind(task.lease_token)
+        .bind(RUN_REJECTED_ERROR_CODE)
         .execute(&mut *transaction)
         .await?
         .rows_affected();

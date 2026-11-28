@@ -356,6 +356,11 @@ const lifecycleSchema = z.object({
   diagnostics: jsonValue,
   created_at: z.string(),
 });
+export type LifecycleRecord = z.infer<typeof lifecycleSchema>;
+export const lifecyclePageSchema = z.object({
+  items: z.array(lifecycleSchema),
+  has_more: z.boolean(),
+});
 /**
  * A secret of one installed extension: one its manifest declares, one an
  * operator set, or both. Its value is write-only and never returned.
@@ -392,7 +397,6 @@ export const installationSchema = z.object({
 const detailSchema = z.object({
   installation: installationSchema,
   grants: z.array(grantSchema),
-  lifecycle: z.array(lifecycleSchema),
 });
 export const discoveredSchema = z.object({
   registry_source: z.string(),

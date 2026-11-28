@@ -25,6 +25,8 @@ use crate::{
 use super::generations::{Generation, advance_generation};
 use super::{AttricatRepository, RepositoryError};
 
+/// The most lifecycle records one page returns.
+const MAX_LIFECYCLE_PAGE: i64 = 200;
 /// `extension_grants.grant_kind` values.
 const GRANT_KIND_CAPABILITY: &str = "capability";
 const GRANT_KIND_HOST_PERMISSION: &str = "host_permission";
@@ -1891,6 +1893,21 @@ impl AttricatRepository {
     ) -> Result<Vec<ExtensionLifecycleRecord>, RepositoryError> {
         Ok(sqlx::query_as("SELECT r.id, r.workspace_id, r.installation_id, r.extension_id, r.installed_release_id, r.operation, r.prior_state, r.new_state, r.outcome, r.actor_user_id, u.display_name AS actor_display_name, u.email AS actor_email, r.actor_token_id, r.source, r.diagnostics, r.created_at FROM extension_lifecycle_records r LEFT JOIN users u ON u.id = r.actor_user_id WHERE r.workspace_id = $1 AND r.extension_id = $2 ORDER BY r.created_at, r.id")
             .bind(self.workspace_id()).bind(extension_id).fetch_all(&self.pool).await?)
+    }
+
+    /// A page of the extension's lifecycle records, newest first, from
+    /// before the `before` position of a previous page.
+    pub async fn extension_lifecycle_page(
+        &self,
+        extension_id: &str,
+        before: Option<(DateTime<Utc>, Uuid)>,
+        limit: i64,
+    ) -> Result<Vec<ExtensionLifecycleRecord>, RepositoryError> {
+        let (before_at, before_id) = before.unzip();
+        Ok(sqlx::query_as("SELECT r.id, r.workspace_id, r.installation_id, r.extension_id, r.installed_release_id, r.operation, r.prior_state, r.new_state, r.outcome, r.actor_user_id, u.display_name AS actor_display_name, u.email AS actor_email, r.actor_token_id, r.source, r.diagnostics, r.created_at FROM extension_lifecycle_records r LEFT JOIN users u ON u.id = r.actor_user_id WHERE r.workspace_id = $1 AND r.extension_id = $2 AND ($3::timestamptz IS NULL OR (r.created_at, r.id) < ($3, $4)) ORDER BY r.created_at DESC, r.id DESC LIMIT $5")
+            .bind(self.workspace_id()).bind(extension_id).bind(before_at).bind(before_id)
+            .bind(limit.clamp(1, MAX_LIFECYCLE_PAGE))
+            .fetch_all(&self.pool).await?)
     }
 
     async fn transition_extension(

@@ -2745,11 +2745,17 @@ the most recent 200; `GET /extension-operation-runs/{id}` retrieves an older
 run by ID. Run history includes `schedule_id` and `outputs_expired`
 without exposing input or secrets. `last_error_code` names the host's category
 of the last failure (`rejected`, `retry` or `operation`) and
-`last_error_message` holds its diagnostic. Component text is untrusted, so a
-diagnostic is kept only as structured JSON with secret-named fields redacted;
-opaque text is stored as `operation failure (diagnostics redacted)`. Return
-failures as JSON objects, and rejections with a specific code, to make them
-diagnosable from the run.
+`last_error_message` holds its diagnostic, kept only as structured JSON with
+secret-named fields redacted. The text message of a typed `rejected` or
+`retry` failure is the component's message for people, so it is kept in a
+`message` field beside the rejection's `rejection_code`; a JSON-object message
+keeps its own fields instead. A fault's or trap's text is untrusted and stored
+as `operation failure (diagnostics redacted)`. A committed batch clears the
+run's last failure. The extension's Failures tab in the web app, backed by
+`GET /extensions/{extension_id}/failures/runs` and `/failures/deliveries`, lists failed and retrying runs with
+their messages beside rejected and exhausted handler deliveries. Reject with a
+specific code and a message a person can act on, and never put a secret in
+either.
 
 When available, the sibling checkout at `../../attricat-extension-example`
 contains the packaged `attricat-extension-example` formula component using the

@@ -37,7 +37,6 @@ import { ApiErrorAlert } from '../../components/ApiErrorAlert';
 import { allConnections, countsByConnection } from './exportCounts';
 import { ExportCountsTable } from './ExportCountsTable';
 import { ExportMappingsTable } from './ExportMappingsTable';
-import { HandlerFailuresTable } from './HandlerFailuresTable';
 import {
   supportedOutletContextVersion,
   extensionOutlets,
@@ -150,7 +149,6 @@ export const ExtensionExportStatusSection = ({
   const visibleSelected = selected.filter((recordId) =>
     mappings.some((mapping) => mapping.record_id === recordId),
   );
-  const handlerFailures = page.data?.pages[0]?.handler_failures ?? [];
   const retryable = retryableExportStatuses.includes(status);
   return (
     <Paper sx={{ p: 4 }}>
@@ -275,9 +273,6 @@ export const ExtensionExportStatusSection = ({
           />
         ))}
       <NextPageButton query={page} sx={{ mt: 2 }} />
-      {handlerFailures.length > 0 && (
-        <HandlerFailuresTable failures={handlerFailures} />
-      )}
       {exports.map((destination) => (
         <Box key={destination.id} sx={{ mt: 3 }}>
           <ExtensionOutlet

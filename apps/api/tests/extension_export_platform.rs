@@ -1363,7 +1363,7 @@ async fn batch_failures_retry_reject_or_fault_by_their_kind(pool: sqlx::PgPool) 
         (status.as_str(), code.as_deref()),
         ("dead_letter", Some("rejected"))
     );
-    // The component's code survives; its free-text message is not kept.
+    // The component's code and message survive for operators.
     let message: Option<String> =
         sqlx::query_scalar("SELECT last_error_message FROM extension_operation_runs WHERE id=$1")
             .bind(rejected[0])
@@ -1372,9 +1372,33 @@ async fn batch_failures_retry_reject_or_fault_by_their_kind(pool: sqlx::PgPool) 
             .unwrap();
     assert_eq!(
         message.as_deref(),
-        Some(r#"{"rejection_code":"feed_rejected"}"#)
+        Some(r#"{"message":"the destination rejected the feed","rejection_code":"feed_rejected"}"#)
     );
     assert_eq!(installation_state(&pool).await, "enabled");
+    // The extension's Failures tab shows the component's code and message.
+    {
+        let (base_url, server) = start_server_with_object_store(pool.clone(), store.clone()).await;
+        let failures: serde_json::Value = authenticated_client()
+            .get(format!("{base_url}/extensions/{EXTENSION}/failures/runs"))
+            .send()
+            .await
+            .unwrap()
+            .error_for_status()
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        server.abort();
+        let run = failures["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|run| run["id"] == rejected[0].to_string())
+            .expect("the rejected run is listed");
+        assert_eq!(run["state"], "failed");
+        assert_eq!(run["error_code"], "feed_rejected");
+        assert_eq!(run["error_message"], "the destination rejected the feed");
+    }
     // A replayed run gets a fresh deferral budget.
     sqlx::query("UPDATE extension_operation_runs SET deferrals=100 WHERE id=$1")
         .bind(rejected[0])

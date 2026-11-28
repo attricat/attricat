@@ -5,6 +5,7 @@
 //! authorization grant: the initiator's current access is checked again by
 //! every selection read, catalog write and artifact download.
 
+use super::{RUN_DIAGNOSTIC_MESSAGE_FIELD, RUN_REJECTED_ERROR_CODE};
 use attricat_domain::canonical_json::canonical_json_sha256;
 use attricat_domain::states::RunStatus;
 use sqlx::AssertSqlSafe;
@@ -102,6 +103,7 @@ struct InteractiveRunRow {
     attempts: i32,
     progress: Value,
     last_error_code: Option<String>,
+    last_error_message: Option<String>,
     outputs_expired: bool,
     selection_blueprint_id: Option<Uuid>,
     selection_blueprint_version: Option<i64>,
@@ -136,7 +138,9 @@ pub enum InteractiveRunFailure {
 }
 
 /// End-user projection of an interactive run. It omits input, configuration,
-/// checkpoints, storage keys and component diagnostics.
+/// checkpoints, storage keys and component diagnostics, except the text
+/// message of a rejection that failed the run, which the component wrote for
+/// the person who started it.
 #[derive(Clone, Debug, Serialize)]
 pub struct InteractiveRun {
     pub id: Uuid,
@@ -148,6 +152,8 @@ pub struct InteractiveRun {
     pub status: InteractiveRunStatus,
     pub progress: Value,
     pub failure: Option<InteractiveRunFailure>,
+    /// The extension's own explanation of an `extension_failed` run.
+    pub failure_message: Option<String>,
     pub can_cancel: bool,
     pub scope: InteractiveScope,
     pub selection_count: i64,
@@ -170,6 +176,17 @@ pub struct InteractiveRunArtifact {
     pub completed_at: Option<DateTime<Utc>>,
 }
 
+/// The text message a stored rejection diagnostic keeps, if any.
+fn rejection_message(diagnostic: Option<&str>) -> Option<String> {
+    match serde_json::from_str::<Value>(diagnostic?).ok()? {
+        Value::Object(mut fields) => match fields.remove(RUN_DIAGNOSTIC_MESSAGE_FIELD)? {
+            Value::String(message) => Some(message),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
 impl From<InteractiveRunRow> for InteractiveRun {
     fn from(row: InteractiveRunRow) -> Self {
         let started = row.lifecycle_started || row.attempts > 0;
@@ -188,6 +205,10 @@ impl From<InteractiveRunRow> for InteractiveRun {
                 _ => InteractiveRunFailure::ExtensionFailed,
             },
         );
+        let failure_message = (failure == Some(InteractiveRunFailure::ExtensionFailed)
+            && row.last_error_code.as_deref() == Some(RUN_REJECTED_ERROR_CODE))
+        .then(|| rejection_message(row.last_error_message.as_deref()))
+        .flatten();
         Self {
             id: row.id,
             extension_id: row.extension_id,
@@ -201,6 +222,7 @@ impl From<InteractiveRunRow> for InteractiveRun {
             status,
             progress: row.progress,
             failure,
+            failure_message,
             scope: stored_scope(&row.selection_scope),
             selection_count: row.selection_count,
             blueprint_id: row.selection_blueprint_id,
@@ -238,7 +260,7 @@ type RunScopeRow = (
     Option<Uuid>,
 );
 
-const RUN_COLUMNS: &str = "r.id,r.extension_id,r.contribution_id,r.operation_id,r.actor_user_id,r.status,r.cancellation_requested,r.lifecycle_started,r.attempts,r.progress,r.last_error_code,r.outputs_expired,r.selection_blueprint_id,r.selection_blueprint_version,r.selection_context_id,r.selection_scope,(SELECT COUNT(*) FROM extension_operation_run_records m WHERE m.operation_run_id=r.id) AS selection_count,r.created_at,r.completed_at,r.cancelled_at";
+const RUN_COLUMNS: &str = "r.id,r.extension_id,r.contribution_id,r.operation_id,r.actor_user_id,r.status,r.cancellation_requested,r.lifecycle_started,r.attempts,r.progress,r.last_error_code,r.last_error_message,r.outputs_expired,r.selection_blueprint_id,r.selection_blueprint_version,r.selection_context_id,r.selection_scope,(SELECT COUNT(*) FROM extension_operation_run_records m WHERE m.operation_run_id=r.id) AS selection_count,r.created_at,r.completed_at,r.cancelled_at";
 
 fn request_digest(input: &StartInteractiveOperation) -> String {
     let mut canonical = json!({
@@ -1035,6 +1057,7 @@ mod tests {
             attempts: 0,
             progress: json!({}),
             last_error_code: None,
+            last_error_message: None,
             outputs_expired: false,
             selection_blueprint_id: None,
             selection_blueprint_version: None,
@@ -1045,6 +1068,31 @@ mod tests {
             completed_at: Some(Utc::now()),
             cancelled_at: None,
         }
+    }
+
+    #[test]
+    fn only_a_rejection_explains_a_failed_run_to_its_user() {
+        let failed = |code: &str, diagnostic: &str| {
+            let mut run = row(RunStatus::DeadLetter);
+            run.last_error_code = Some(code.into());
+            run.last_error_message = Some(diagnostic.into());
+            InteractiveRun::from(run).failure_message
+        };
+        assert_eq!(
+            failed(
+                RUN_REJECTED_ERROR_CODE,
+                r#"{"message":"NIP is invalid","rejection_code":"client_rejected"}"#
+            )
+            .as_deref(),
+            Some("NIP is invalid")
+        );
+        // Other fields, and the text of other failures, stay operator-only.
+        assert_eq!(failed(RUN_REJECTED_ERROR_CODE, r#"{"status":422}"#), None);
+        assert_eq!(failed("operation", r#"{"message":"trap at 0x2a"}"#), None);
+        let mut running = row(RunStatus::Pending);
+        running.last_error_code = Some(RUN_REJECTED_ERROR_CODE.into());
+        running.last_error_message = Some(r#"{"message":"later"}"#.into());
+        assert_eq!(InteractiveRun::from(running).failure_message, None);
     }
 
     #[test]

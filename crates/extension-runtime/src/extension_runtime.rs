@@ -2107,6 +2107,7 @@ impl ExtensionOperationTaskHandler {
             // like a deferral, so it does not spend the failure budget until
             // the run has waited `MAX_RETRY_DEFERRALS` times in a row.
             BatchError::Failure(InvocationFailure::Retry { message, after }) => {
+                let message = outcomes::retry_diagnostic(&message);
                 let delay = after.unwrap_or_else(|| retry_backoff(task.failures.max(0) as u32 + 1));
                 let at = chrono::Utc::now()
                     + chrono::TimeDelta::from_std(delay).unwrap_or(chrono::TimeDelta::zero());

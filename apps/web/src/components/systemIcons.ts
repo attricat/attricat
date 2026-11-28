@@ -18,6 +18,7 @@ export { FileOutputIcon as ExportIcon } from 'lucide-react';
 export { PlugIcon as ExtensionConnectionIcon } from 'lucide-react';
 export { WebhookIcon as ExtensionWebhookIcon } from 'lucide-react';
 export { KeySquareIcon as ExtensionSecretIcon } from 'lucide-react';
+export { TriangleAlertIcon as ExtensionFailureIcon } from 'lucide-react';
 export { WrenchIcon as InspectorIcon } from 'lucide-react';
 export { SettingsIcon as ManagementIcon } from 'lucide-react';
 export { RocketIcon as OnboardingIcon } from 'lucide-react';

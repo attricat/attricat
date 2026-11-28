@@ -2100,6 +2100,7 @@
       "connections": "Połączenia",
       "webhooks": "Webhooki",
       "secrets": "Sekrety",
+      "failures": "Błędy",
       "lifecycle": "Cykl życia"
     },
     "lifecycle": "Cykl życia i stan",
@@ -3270,6 +3271,23 @@
     "filterByExport": "Stan eksportu",
     "filterChip": "{{destination}}: {{status}}",
     "removeFilter": "Usuń filtr {{filter}}"
+  },
+  "extensionFailures": {
+    "title": "Błędy",
+    "description": "Nieudane zadania tego rozszerzenia działające w tle: wykonania operacji, także zaplanowane, oraz dostarczenia zdarzeń, które jego obsługa odrzuciła lub których zaniechała. Błędy pochodzą od rozszerzenia, więc są pokazane tak, jak je zapisało.",
+    "empty": "Brak błędów",
+    "emptyDescription": "Tutaj pojawią się nieudane wykonania i dostarczenia zdarzeń tego rozszerzenia.",
+    "runs": "Wykonania operacji",
+    "operation": "Operacja",
+    "scheduled": "Uruchomione według harmonogramu",
+    "state": "Stan",
+    "states": {
+      "failed": "Nieudane",
+      "retrying": "Ponawiane"
+    },
+    "error": "Błąd",
+    "attempts": "Próby",
+    "updated": "Zaktualizowano"
   },
   "extensionWebhooks": {
     "title": "Webhooki",

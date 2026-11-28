@@ -66,7 +66,7 @@ export const workspaceExportStatusSchema = z.object({
   destinations: z.array(exportDestinationSchema),
 });
 
-const handlerFailureSchema = z.object({
+export const handlerFailureSchema = z.object({
   event_id: z.uuid(),
   event_type: z.string(),
   handler_id: z.string(),

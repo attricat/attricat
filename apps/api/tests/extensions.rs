@@ -2561,6 +2561,26 @@ async fn lifecycle_installs_validated_archive_artifacts_and_retains_history(pool
         .await
         .unwrap();
     assert_eq!(history.last().unwrap().operation, "remove");
+    // Pages run newest first and continue where the last one stopped.
+    let mut paged = Vec::new();
+    let mut before = None;
+    loop {
+        let page = repository
+            .extension_lifecycle_page("acme.extension", before, 2)
+            .await
+            .unwrap();
+        let Some(last) = page.last() else { break };
+        before = Some((last.created_at, last.id));
+        paged.extend(page.into_iter().map(|record| record.id));
+    }
+    assert_eq!(
+        paged,
+        history
+            .iter()
+            .rev()
+            .map(|record| record.id)
+            .collect::<Vec<_>>()
+    );
     assert!(
         history
             .iter()

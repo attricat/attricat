@@ -33,14 +33,11 @@ pub struct Rejection {
 
 impl Rejection {
     /// The diagnostic a run keeps for this rejection. Stored run errors keep
-    /// only structured JSON (redacted) and drop opaque text, so the code goes
-    /// in as a field, with the message's own fields when it is a JSON object.
-    /// A code that is not a plain identifier is left out.
+    /// only structured JSON (redacted), so the code goes in as a field beside
+    /// the message's (see [`message_fields`]). A code that is not a plain
+    /// identifier is left out.
     pub fn diagnostic(&self) -> String {
-        let mut diagnostic = match serde_json::from_str::<serde_json::Value>(&self.message) {
-            Ok(serde_json::Value::Object(fields)) => fields,
-            _ => serde_json::Map::new(),
-        };
+        let mut diagnostic = message_fields(&self.message);
         if is_identifier(&self.code) {
             diagnostic.insert(
                 REJECTION_CODE_FIELD.into(),
@@ -51,8 +48,30 @@ impl Rejection {
     }
 }
 
-/// The diagnostic field that names a rejection's code.
-const REJECTION_CODE_FIELD: &str = "rejection_code";
+use crate::repository::{
+    RUN_DIAGNOSTIC_CODE_FIELD as REJECTION_CODE_FIELD,
+    RUN_DIAGNOSTIC_MESSAGE_FIELD as MESSAGE_FIELD,
+};
+
+/// The diagnostic a run keeps for a temporary failure's message.
+pub fn retry_diagnostic(message: &str) -> String {
+    serde_json::Value::Object(message_fields(message)).to_string()
+}
+
+/// A typed failure's message as diagnostic fields: a JSON object keeps its
+/// own fields, and text goes in [`MESSAGE_FIELD`]. The component wrote the
+/// text for people to read, unlike a trap's, so it is kept; the run store
+/// still redacts sensitive field names.
+fn message_fields(message: &str) -> serde_json::Map<String, serde_json::Value> {
+    match serde_json::from_str::<serde_json::Value>(message) {
+        Ok(serde_json::Value::Object(fields)) => fields,
+        _ if message.trim().is_empty() => serde_json::Map::new(),
+        _ => serde_json::Map::from_iter([(
+            MESSAGE_FIELD.to_owned(),
+            serde_json::Value::String(message.to_owned()),
+        )]),
+    }
+}
 
 fn is_identifier(code: &str) -> bool {
     !code.is_empty()
@@ -175,9 +194,13 @@ mod tests {
     }
 
     #[test]
-    fn rejection_diagnostics_keep_the_code_but_not_opaque_text() {
+    fn rejection_diagnostics_keep_the_code_and_message() {
         assert_eq!(
             rejection("invalid_checkpoint", "invalid checkpoint").diagnostic(),
+            r#"{"message":"invalid checkpoint","rejection_code":"invalid_checkpoint"}"#
+        );
+        assert_eq!(
+            rejection("invalid_checkpoint", " ").diagnostic(),
             r#"{"rejection_code":"invalid_checkpoint"}"#
         );
         // A structured message keeps its fields; the code is the host's.
@@ -186,5 +209,15 @@ mod tests {
             r#"{"version":2,"rejection_code":"template_changed"}"#
         );
         assert_eq!(rejection("token=secret value", "").diagnostic(), "{}");
+    }
+
+    #[test]
+    fn retry_diagnostics_keep_the_message() {
+        assert_eq!(
+            retry_diagnostic("Fakturownia is unavailable"),
+            r#"{"message":"Fakturownia is unavailable"}"#
+        );
+        assert_eq!(retry_diagnostic(r#"{"status":503}"#), r#"{"status":503}"#);
+        assert_eq!(retry_diagnostic(""), "{}");
     }
 }
