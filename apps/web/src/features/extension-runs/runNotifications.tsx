@@ -44,5 +44,13 @@ export const notifyRunFinished = (run: ExtensionRun, navigate: Navigate) => {
     toast.success(i18n.t('extensionRuns.finished'), { action });
   else if (run.status === extensionRunStatuses.cancelled)
     toast.info(i18n.t('extensionRuns.cancelledNotice'), { action });
+  // The extension's own explanation is shown as it wrote it.
+  else if (run.failure_message)
+    toast.error(
+      i18n.t('extensionRuns.failedNoticeWithReason', {
+        reason: run.failure_message,
+      }),
+      { action },
+    );
   else toast.error(i18n.t('extensionRuns.failedNotice'), { action });
 };

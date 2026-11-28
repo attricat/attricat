@@ -2934,6 +2934,7 @@
     "finished": "Extension run completed.",
     "cancelledNotice": "Extension run cancelled.",
     "failedNotice": "Extension run failed.",
+    "failedNoticeWithReason": "Extension run failed: {{reason}}",
     "recordCount_one": "{{count}} record",
     "wholeBlueprint": "Whole blueprint",
     "recordCount_other": "{{count}} records",
