@@ -6,6 +6,8 @@ use attricat_domain::{constants::SESSION_MAX_AGE_HOURS, states::SessionAuthMetho
 
 use crate::account::{ActionTokenDigest, PasswordHash, SessionDigest};
 
+use crate::constants::LOGIN_ATTEMPTS_PER_WINDOW;
+
 use super::{AttricatRepository, RepositoryError, oidc_sign_in::NewOidcSession};
 
 /// Sign-on starts per client in a window. A whole office can share one address,
@@ -322,8 +324,8 @@ impl<S: super::RepositoryScope> AttricatRepository<S> {
     ) -> Result<bool, RepositoryError> {
         let mut tx = self.pool.begin().await?;
         let allowed = sqlx::query_scalar::<_, bool>(
-            "INSERT INTO browser_login_rate_limits (key_digest, window_started_at, failures) VALUES ($1, clock_timestamp(), 1) ON CONFLICT (key_digest) DO UPDATE SET failures = CASE WHEN browser_login_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN 1 ELSE browser_login_rate_limits.failures + 1 END, window_started_at = CASE WHEN browser_login_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN clock_timestamp() ELSE browser_login_rate_limits.window_started_at END RETURNING failures <= 5",
-        ).bind(key.as_ref()).fetch_one(&mut *tx).await?;
+            "INSERT INTO browser_login_rate_limits (key_digest, window_started_at, failures) VALUES ($1, clock_timestamp(), 1) ON CONFLICT (key_digest) DO UPDATE SET failures = CASE WHEN browser_login_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN 1 ELSE browser_login_rate_limits.failures + 1 END, window_started_at = CASE WHEN browser_login_rate_limits.window_started_at <= clock_timestamp() - interval '15 minutes' THEN clock_timestamp() ELSE browser_login_rate_limits.window_started_at END RETURNING failures <= $2",
+        ).bind(key.as_ref()).bind(LOGIN_ATTEMPTS_PER_WINDOW).fetch_one(&mut *tx).await?;
         self.commit_mutation(tx).await?;
         Ok(allowed)
     }

@@ -15,7 +15,9 @@ pub mod constants {
         DEFAULT_HTTP_MAX_EVENT_STREAMS_PER_PRINCIPAL, DEFAULT_HTTP_REQUEST_TIMEOUT_SECONDS,
         READINESS_PROBE_PERMITS,
     };
-    pub use attricat_repository::constants::{REQUEST_POOL_CONNECTIONS, TASK_POOL_CONNECTIONS};
+    pub use attricat_repository::constants::{
+        LOGIN_ATTEMPTS_PER_WINDOW, REQUEST_POOL_CONNECTIONS, TASK_POOL_CONNECTIONS,
+    };
 
     pub const MAINTENANCE_POOL_CONNECTIONS: u32 = 1;
 }

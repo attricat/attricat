@@ -556,7 +556,7 @@ async fn login_attempt_budget_is_shared_across_workspaces(pool: PgPool) {
     sqlx::query("INSERT INTO workspaces (id, slug, name, login_identifier) VALUES ($1, 'other', 'Other', 'other.local')")
         .bind(Uuid::new_v4()).execute(&pool).await.unwrap();
     let client = Client::new();
-    for _ in 0..5 {
+    for _ in 0..api::constants::LOGIN_ATTEMPTS_PER_WINDOW {
         assert_eq!(client.post(format!("{base}/auth/login"))
             .json(&json!({"login_identifier":"default.local", "email":"victim@example.test", "password":"wrong"}))
             .send().await.unwrap().status(), StatusCode::UNAUTHORIZED);

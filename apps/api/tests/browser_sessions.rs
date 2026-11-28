@@ -2,6 +2,7 @@ use crate::support;
 
 use api::{
     account::{Password, SessionDigest, SessionSecret, hash_password},
+    constants::LOGIN_ATTEMPTS_PER_WINDOW,
     repository::{AttricatRepository, NewOidcSession},
 };
 use chrono::{DateTime, Duration, Utc};
@@ -321,7 +322,7 @@ async fn stale_password_verification_cannot_issue_a_session(pool: PgPool) {
 async fn login_rate_limit_rejects_attempts_after_the_fixed_window_threshold(pool: PgPool) {
     let (base_url, server) = start_session_server(pool).await;
     let client = Client::new();
-    for _ in 0..5 {
+    for _ in 0..LOGIN_ATTEMPTS_PER_WINDOW {
         let response = client
             .post(format!("{base_url}/auth/login"))
             .json(&json!({ "login_identifier": "default.local", "email": "limited@example.test", "password": "wrong" }))
@@ -1259,7 +1260,7 @@ async fn changing_the_password_ends_other_sessions_but_keeps_tokens(pool: PgPool
 
     // Wrong guesses share the sign-in limit, so a borrowed session cannot
     // be used to guess the password.
-    for _ in 0..5 {
+    for _ in 0..LOGIN_ATTEMPTS_PER_WINDOW {
         assert_eq!(
             renewed
                 .change_password(&base_url, "guess", "another strong password 3")
