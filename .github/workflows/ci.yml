@@ -81,6 +81,14 @@ jobs:
       # their file and line; only backtraces lose line numbers.
       CARGO_PROFILE_DEV_DEBUG: 0
       CARGO_PROFILE_TEST_DEBUG: 0
+      # rust-cache keeps dependencies, but cargo judges our own crates by
+      # file times, which every checkout resets. sccache caches each
+      # library crate by the hash of its sources (including files macros
+      # read, such as the embedded migrations) and flags, so unchanged
+      # crates are not compiled again. Linked crates, such as test
+      # executables, always compile.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@master
@@ -88,10 +96,14 @@ jobs:
           toolchain: stable
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: taiki-e/install-action@wasm-tools
       - name: Record initial disk usage
         run: df -h
       - run: scripts/ci-rust-tests.sh ${{ matrix.slice }} ${{ strategy.job-total }}
+      - name: Show compiler cache hits
+        if: always()
+        run: sccache --show-stats
       - name: Record final disk usage
         if: always()
         run: |
@@ -177,6 +189,9 @@ jobs:
     env:
       CARGO_INCREMENTAL: 0
       CARGO_PROFILE_DEV_DEBUG: 0
+      # Shares rust-test's compiled library crates; see there.
+      RUSTC_WRAPPER: sccache
+      SCCACHE_GHA_ENABLED: 'true'
       # Global setup side-loads the example extension, built from its own
       # repository rather than a sibling checkout.
       ATTRICAT_EXTENSION_EXAMPLE_DIR: ${{ github.workspace }}/.e2e/attricat-extension-example
@@ -195,6 +210,7 @@ jobs:
           workspaces: |
             . -> target
             .e2e/attricat-extension-example -> target
+      - uses: mozilla-actions/sccache-action@v0.0.11
       - uses: taiki-e/install-action@v2
         with:
           tool: just,wasm-tools
@@ -209,6 +225,8 @@ jobs:
       # Build the API before Playwright starts it, so the server start-up wait
       # in global setup does not include compilation.
       - run: cargo build --locked -p api --bins
+      - name: Show compiler cache hits
+        run: sccache --show-stats
       - run: node scripts/test-e2e.mjs ${{ matrix.args }}
       - name: Upload Playwright results
         if: failure()
