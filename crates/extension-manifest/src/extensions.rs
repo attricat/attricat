@@ -3394,11 +3394,11 @@ mod tests {
     #[test]
     fn host_api_ranges_must_accept_the_supported_abi() {
         let mut value = manifest();
-        for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0", "^1.1", "^1.2"] {
+        for range in ["^1.0", ">=1.0.0, <2.0.0", "1.0.0", "^1.1", "^1.2", "^1.3"] {
             value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_ok(), "{range}");
         }
-        for range in [">=1.3.0, <2.0.0", "^2", "<1.0.0"] {
+        for range in [">=1.4.0, <2.0.0", "^2", "<1.0.0"] {
             value.attricat.host_api = range.into();
             assert!(value.validate(SUPPORTED_HOST_API).is_err(), "{range}");
         }
